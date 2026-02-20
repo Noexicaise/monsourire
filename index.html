@@ -8,56 +8,30 @@
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
-        
-        * { 
-            -webkit-tap-highlight-color: transparent; 
-            -webkit-touch-callout: none; 
-            user-select: none;
-            font-family: 'Plus Jakarta Sans', sans-serif;
-        }
-
-        body { 
-            background-color: #F8FAFC; 
-            overscroll-behavior: none;
-        }
-
-        .day-btn { 
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
-        }
-
-        /* Animation de pression */
-        .is-pressing { 
-            transform: scale(0.92);
-            filter: brightness(0.9);
-        }
-
-        /* État "En cours d'appui long" */
-        .is-long-pressing {
-            transform: scale(1.1);
-            background-color: #FFE4E6 !important;
-            border-color: #FB7185 !important;
-        }
-
-        .completed-done {
-            background-color: #22C55E !important;
-            border-color: #16A34A !important;
-            color: white !important;
-        }
-
-        .completed-missed {
-            background-color: #F43F5E !important;
-            border-color: #E11D48 !important;
-            color: white !important;
-        }
+        * { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; user-select: none; font-family: 'Plus Jakarta Sans', sans-serif; }
+        body { background-color: #F8FAFC; overscroll-behavior: none; }
+        .day-btn { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); position: relative; }
+        .is-pressing { transform: scale(0.92); filter: brightness(0.9); }
+        .is-long-pressing { transform: scale(1.1); background-color: #FFE4E6 !important; border-color: #FB7185 !important; }
+        .completed-done { background-color: #22C55E !important; border-color: #16A34A !important; color: white !important; }
+        .completed-missed { background-color: #F43F5E !important; border-color: #E11D48 !important; color: white !important; }
+        #loader { position: fixed; inset: 0; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; transition: opacity 0.5s ease; }
     </style>
 </head>
 <body class="pb-10">
 
+    <div id="loader">
+        <div class="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent mb-4"></div>
+        <p class="text-slate-500 font-bold text-sm">Connexion Cloud...</p>
+    </div>
+
     <header class="bg-white p-6 shadow-sm rounded-b-[40px] mb-6 flex justify-between items-center border-b border-slate-100">
         <div>
             <h1 class="text-2xl font-extrabold text-slate-800 tracking-tight text-indigo-600">Suivi Maya ✨</h1>
-            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Enregistré localement</p>
+            <div class="flex items-center gap-2">
+                <div id="status-dot" class="h-2 w-2 rounded-full bg-slate-300"></div>
+                <p id="status-text" class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Initialisation...</p>
+            </div>
         </div>
         <div id="trophy" class="bg-indigo-50 p-4 rounded-2xl text-2xl transition-all duration-500">🦷</div>
     </header>
@@ -69,9 +43,7 @@
                     <p class="text-indigo-300 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">Objectif Sourire</p>
                     <h2 class="text-5xl font-black italic" id="counter">0 / 30</h2>
                 </div>
-                <div class="text-right">
-                    <p id="message" class="text-indigo-400 font-bold text-sm leading-tight max-w-[120px]">C'est parti ! 💪</p>
-                </div>
+                <p id="message" class="text-indigo-400 font-bold text-sm leading-tight max-w-[120px] text-right text-balance">Chargement...</p>
             </div>
             <div class="w-full bg-slate-800 h-4 rounded-full overflow-hidden p-1">
                 <div id="progress-bar" class="bg-gradient-to-r from-indigo-500 to-emerald-400 h-full rounded-full transition-all duration-1000 ease-out" style="width: 0%"></div>
@@ -80,130 +52,98 @@
 
         <div class="grid grid-cols-4 gap-3" id="grid"></div>
 
-        <button onclick="confirmReset()" class="block mx-auto mt-12 text-slate-300 text-[10px] font-bold uppercase tracking-[0.2em]">
-            Réinitialiser
-        </button>
+        <div class="mt-8 flex justify-center gap-6">
+            <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-emerald-500"></div><span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Court = OK</span></div>
+            <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-rose-500"></div><span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Long = Oubli</span></div>
+        </div>
+
+        <button onclick="confirmReset()" class="block mx-auto mt-12 text-slate-300 text-[10px] font-bold uppercase tracking-[0.2em]">Réinitialiser</button>
     </main>
 
-    <script>
-        const STORAGE_KEY = 'maya_tracker_v3';
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
+        import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-database.js";
+
+        // ==========================================
+        // REMPLACER PAR VOS INFOS
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "VOTRE_API_KEY",
+            databaseURL: "https://mon-sourire-default-rtdb.europe-west1.firebasedatabase.app/", // Ex: https://xxx.firebaseio.com
+            projectId: "mon-sourire",
+            appId: "89132434426"
+        };
+        // ==========================================
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const dataRef = ref(db, 'suivi/maya');
+
         const totalDays = 30;
         const startDate = new Date(2026, 1, 20);
-        
-        let daysState = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
-        let timer;
-        let startTime;
+        let daysState = {};
+        let pressTimer;
+        let pressStartTime;
+
+        function init() {
+            onValue(dataRef, (snapshot) => {
+                daysState = snapshot.val() || {};
+                render();
+                document.getElementById('status-dot').className = "h-2 w-2 rounded-full bg-emerald-500 animate-pulse";
+                document.getElementById('status-text').innerText = "Cloud (Gratuit) Connecté";
+                document.getElementById('loader').style.opacity = '0';
+                setTimeout(() => document.getElementById('loader').style.display = 'none', 500);
+            }, (error) => {
+                document.getElementById('status-text').innerText = "Erreur de Droits";
+            });
+        }
 
         function render() {
             const grid = document.getElementById('grid');
-            const counter = document.getElementById('counter');
-            const progress = document.getElementById('progress-bar');
-            const msg = document.getElementById('message');
-            const trophy = document.getElementById('trophy');
-            
+            let done = 0;
             grid.innerHTML = '';
-            let doneCount = 0;
-            const todayStr = new Date().toISOString().split('T')[0];
-
             for (let i = 0; i < totalDays; i++) {
-                const date = new Date(startDate);
-                date.setDate(startDate.getDate() + i);
-                const dateKey = date.toISOString().split('T')[0];
-                const state = daysState[dateKey];
-                const isToday = todayStr === dateKey;
-                
-                if (state === 'done') doneCount++;
+                const date = new Date(startDate); date.setDate(startDate.getDate() + i);
+                const key = date.toISOString().split('T')[0];
+                const state = daysState[key];
+                if (state === 'done') done++;
 
                 const btn = document.createElement('button');
                 btn.className = `day-btn h-20 rounded-[22px] border-2 flex flex-col items-center justify-center font-bold `;
-                
-                if (state === 'done') {
-                    btn.classList.add('completed-done');
-                    btn.innerHTML = '✅';
-                } else if (state === 'missed') {
-                    btn.classList.add('completed-missed');
-                    btn.innerHTML = '❌';
-                } else {
-                    btn.classList.add(isToday ? 'bg-indigo-50' : 'bg-white', isToday ? 'border-indigo-400' : 'border-slate-100', isToday ? 'text-indigo-600' : 'text-slate-400');
-                    btn.innerHTML = `
-                        <span class="text-[9px] uppercase opacity-50">${date.toLocaleDateString('fr-FR', { weekday: 'short' })}</span>
-                        <span class="text-xl">${date.getDate()}</span>
-                    `;
+                if (state === 'done') { btn.classList.add('completed-done'); btn.innerHTML = '✅'; }
+                else if (state === 'missed') { btn.classList.add('completed-missed'); btn.innerHTML = '❌'; }
+                else {
+                    btn.classList.add('bg-white', 'border-slate-100', 'text-slate-400');
+                    btn.innerHTML = `<span class="text-[9px] opacity-50 uppercase">${date.toLocaleDateString('fr-FR', {weekday:'short'})}</span><span class="text-xl">${date.getDate()}</span>`;
                 }
 
-                // GESTION UNIFIÉE DES ÉVÉNEMENTS
-                const onStart = (e) => {
-                    startTime = Date.now();
-                    btn.classList.add('is-pressing');
-                    
-                    timer = setTimeout(() => {
-                        btn.classList.add('is-long-pressing');
-                        if (navigator.vibrate) navigator.vibrate(50);
-                    }, 600);
-                };
-
-                const onEnd = (e) => {
-                    const duration = Date.now() - startTime;
-                    clearTimeout(timer);
+                const start = () => { pressStartTime = Date.now(); btn.classList.add('is-pressing'); pressTimer = setTimeout(() => btn.classList.add('is-long-pressing'), 600); };
+                const end = (e) => {
+                    const dur = Date.now() - pressStartTime;
+                    clearTimeout(pressTimer);
                     btn.classList.remove('is-pressing', 'is-long-pressing');
-
-                    // Si on relâche après 600ms = Oubli
-                    if (duration >= 600) {
-                        handleAction(dateKey, 'missed');
-                    } 
-                    // Si on relâche vite = Fait
-                    else if (duration > 50) { 
-                        handleAction(dateKey, 'done');
-                    }
+                    if (dur >= 600) { handle(key, 'missed'); } else if (dur > 50) { handle(key, 'done'); }
                 };
 
-                // Desktop
-                btn.onmousedown = onStart;
-                btn.onmouseup = onEnd;
-                btn.onmouseleave = () => { clearTimeout(timer); btn.classList.remove('is-pressing', 'is-long-pressing'); };
-
-                // Mobile
-                btn.ontouchstart = (e) => { e.preventDefault(); onStart(); };
-                btn.ontouchend = (e) => { e.preventDefault(); onEnd(); };
-
+                btn.onmousedown = start; btn.onmouseup = end;
+                btn.ontouchstart = (e) => { e.preventDefault(); start(); };
+                btn.ontouchend = (e) => { e.preventDefault(); end(); };
                 grid.appendChild(btn);
             }
-
-            counter.innerText = `${doneCount} / ${totalDays}`;
-            progress.style.width = `${(doneCount / totalDays) * 100}%`;
-
-            if (doneCount === totalDays) {
-                msg.innerText = "Bravo Maya, tu y es arrivée ! 🎉";
-                trophy.innerHTML = '🏆';
-                trophy.classList.add('scale-125', 'bg-yellow-100');
-            } else {
-                msg.innerText = doneCount > 15 ? "Déjà la moitié ! 🔥" : "Continue Maya ! ✨";
-            }
+            document.getElementById('counter').innerText = `${done} / ${totalDays}`;
+            document.getElementById('progress-bar').style.width = `${(done/totalDays)*100}%`;
+            document.getElementById('message').innerText = done === totalDays ? "Gagné ! 🎉" : "Continue Maya ! ✨";
         }
 
-        function handleAction(dateKey, type) {
-            if (daysState[dateKey] === type) {
-                delete daysState[dateKey];
-            } else {
-                daysState[dateKey] = type;
-            }
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(daysState));
-            render();
-
-            if (type === 'done' && Object.values(daysState).filter(v => v === 'done').length === totalDays) {
-                confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
-            }
+        function handle(key, type) {
+            const s = {...daysState};
+            if (s[key] === type) delete s[key]; else s[key] = type;
+            set(dataRef, s);
+            if (type === 'done' && Object.values(s).filter(v => v === 'done').length === totalDays) confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
         }
 
-        window.confirmReset = () => {
-            if (confirm("Effacer tout le suivi ?")) {
-                daysState = {};
-                localStorage.removeItem(STORAGE_KEY);
-                render();
-            }
-        };
-
-        render();
+        window.confirmReset = () => { if(confirm("Effacer pour tout le monde ?")) set(dataRef, null); };
+        init();
     </script>
 </body>
 </html>
