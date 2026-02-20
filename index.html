@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
-import { LucideCheck, LucideX, LucideTrophy, LucideSettings2 } from 'lucide-react';
+import { LucideCheck, LucideX, LucideTrophy } from 'lucide-react';
 
-// Configuration Firebase (Injectée par l'environnement)
+// Configuration Firebase
 const firebaseConfig = JSON.parse(__firebase_config);
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -13,14 +13,14 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'disjoncteur-maya';
 
 export default function App() {
   const [user, setUser] = useState(null);
-  const [daysState, setDaysState] = useState({}); // { 'dateKey': 'done' | 'missed' }
+  const [daysState, setDaysState] = useState({}); 
   const [loading, setLoading] = useState(true);
+  const [isPressing, setIsPressing] = useState(null); // Pour l'effet visuel d'appui
   const pressTimer = useRef(null);
 
   const totalDays = 30;
-  const startDate = new Date(2026, 1, 20); // 20 Février 2026
+  const startDate = new Date(2026, 1, 20); 
 
-  // 1. Authentification
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -29,89 +29,65 @@ export default function App() {
         } else {
           await signInAnonymously(auth);
         }
-      } catch (err) {
-        console.error("Auth error:", err);
-      }
+      } catch (err) { console.error(err); }
     };
     initAuth();
     const unsubscribe = onAuthStateChanged(auth, setUser);
     return () => unsubscribe();
   }, []);
 
-  // 2. Synchronisation des données (Cloud)
   useEffect(() => {
     if (!user) return;
-
     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'progress');
-    
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         setDaysState(docSnap.data().states || {});
       } else {
-        // Initialiser le document si inexistant
         setDoc(docRef, { states: {} });
       }
       setLoading(false);
     }, (err) => {
-      console.error("Firestore error:", err);
+      console.error(err);
       setLoading(false);
     });
-
     return () => unsubscribe();
   }, [user]);
 
-  // Actions
   const updateDay = async (dateKey, status) => {
     if (!user) return;
     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'progress');
-    
     const newState = { ...daysState };
+    
+    // Logique de bascule (Toggle)
     if (newState[dateKey] === status) {
-      delete newState[dateKey]; // Toggle off
+      delete newState[dateKey];
     } else {
       newState[dateKey] = status;
     }
 
     try {
       await updateDoc(docRef, { states: newState });
-      if (status === 'done' && Object.values(newState).filter(s => s === 'done').length === totalDays) {
-        triggerConfetti();
-      }
-    } catch (err) {
-      console.error("Update error:", err);
-    }
+    } catch (err) { console.error(err); }
   };
 
-  // Gestion Appui Long
-  const handleTouchStart = (dateKey) => {
+  // GESTION APPUI LONG AMELIOREE
+  const startPress = (e, dateKey) => {
+    // Empêche le menu contextuel sur certains navigateurs
+    setIsPressing(dateKey);
     pressTimer.current = setTimeout(() => {
       updateDay(dateKey, 'missed');
-      if (window.navigator.vibrate) window.navigator.vibrate(100);
-    }, 800);
+      if (window.navigator.vibrate) window.navigator.vibrate(50);
+      setIsPressing(null);
+    }, 700); // 700ms pour déclencher la croix rouge
   };
 
-  const handleTouchEnd = () => {
+  const cancelPress = () => {
     clearTimeout(pressTimer.current);
+    setIsPressing(null);
   };
 
-  const triggerConfetti = () => {
-    // Note: window.confetti est chargé via le script externe dans une app réelle
-    // Ici on simule ou on utilise une lib si disponible
-    if (window.confetti) {
-        window.confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
-    }
-  };
-
-  // Calculs
   const doneCount = Object.values(daysState).filter(s => s === 'done').length;
   const progressPercent = (doneCount / totalDays) * 100;
-  
-  const getMessage = () => {
-    if (doneCount === 0) return "C'est parti Maya ! 💪";
-    if (doneCount === totalDays) return "Bravo Maya ! Tu as fini ! 🎉";
-    if (doneCount > 15) return "Plus que la moitié ! 🌈";
-    return "On continue comme ça ! ✨";
-  };
 
   if (loading) return (
     <div className="flex h-screen items-center justify-center bg-slate-50">
@@ -120,27 +96,33 @@ export default function App() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-20 text-slate-900">
-      {/* Header */}
-      <header className="bg-white p-6 shadow-sm rounded-b-[40px] mb-8 flex justify-between items-center">
+    <div className="min-h-screen bg-slate-50 pb-20 text-slate-900 select-none overflow-x-hidden">
+      {/* CSS Inline pour bloquer la sélection de texte au niveau global */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        * { -webkit-user-select: none; -webkit-touch-callout: none; user-select: none; }
+        .no-select { -webkit-user-select: none; -webkit-touch-callout: none; user-select: none; }
+      `}} />
+
+      <header className="bg-white p-6 shadow-sm rounded-b-[40px] mb-8 flex justify-between items-center border-b border-slate-100">
         <div>
           <h1 className="text-2xl font-black text-slate-800">Mon Suivi 🦷</h1>
-          <p className="text-slate-500 text-sm">Synchronisé (Papa & Maman)</p>
+          <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">Maya • Cloud Sync</p>
         </div>
-        <div className={`p-4 rounded-3xl ${doneCount === totalDays ? 'bg-yellow-100 animate-bounce' : 'bg-indigo-50'}`}>
+        <div className={`p-4 rounded-3xl transition-all ${doneCount === totalDays ? 'bg-yellow-100 scale-110' : 'bg-indigo-50'}`}>
           {doneCount === totalDays ? <LucideTrophy className="text-yellow-600" /> : <span className="text-2xl">✨</span>}
         </div>
       </header>
 
       <main className="max-w-md mx-auto px-6">
-        {/* Progress Card */}
-        <div className="bg-slate-900 rounded-[32px] p-6 text-white mb-8 shadow-xl shadow-slate-200">
+        <div className="bg-slate-900 rounded-[32px] p-6 text-white mb-8 shadow-xl">
           <div className="flex justify-between items-end mb-4">
             <div>
-              <p className="text-indigo-300 text-xs font-bold uppercase tracking-widest mb-1">Maya</p>
-              <h2 className="text-4xl font-black">{doneCount} / {totalDays}</h2>
+              <p className="text-indigo-300 text-[10px] font-bold uppercase mb-1">Objectif Maya</p>
+              <h2 className="text-4xl font-black">{doneCount} <span className="text-xl text-slate-500 font-normal">/ {totalDays}</span></h2>
             </div>
-            <p className="text-indigo-400 text-sm font-bold text-right max-w-[120px]">{getMessage()}</p>
+            <p className="text-indigo-400 text-xs font-bold text-right max-w-[100px]">
+              {doneCount === totalDays ? "INCROYABLE ! 🎉" : "On lâche rien ! 💪"}
+            </p>
           </div>
           <div className="w-full bg-slate-800 h-3 rounded-full overflow-hidden">
             <div 
@@ -150,12 +132,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Aide */}
-        <p className="text-center text-[10px] text-slate-400 uppercase font-bold tracking-widest mb-6">
-          Clic = Fait • Appui Long = Oubli
-        </p>
-
-        {/* Grid */}
         <div className="grid grid-cols-4 gap-3">
           {Array.from({ length: totalDays }).map((_, i) => {
             const date = new Date(startDate);
@@ -163,56 +139,70 @@ export default function App() {
             const dateKey = date.toISOString().split('T')[0];
             const state = daysState[dateKey];
             const isToday = new Date().toISOString().split('T')[0] === dateKey;
+            const pressingThis = isPressing === dateKey;
 
             return (
               <button
                 key={dateKey}
-                onMouseDown={() => handleTouchStart(dateKey)}
-                onMouseUp={handleTouchEnd}
-                onTouchStart={() => handleTouchStart(dateKey)}
-                onTouchEnd={handleTouchEnd}
-                onClick={() => updateDay(dateKey, 'done')}
+                // Evenements pour mobile et desktop sans sélection de texte
+                onContextMenu={(e) => e.preventDefault()}
+                onTouchStart={(e) => startPress(e, dateKey)}
+                onTouchEnd={cancelPress}
+                onMouseDown={(e) => startPress(e, dateKey)}
+                onMouseUp={cancelPress}
+                onMouseLeave={cancelPress}
+                onClick={() => {
+                   // Le clic simple ne doit pas être bloqué par le timer si on relâche vite
+                   if (!state || state === 'missed') updateDay(dateKey, 'done');
+                   else if (state === 'done') updateDay(dateKey, 'done'); 
+                }}
                 className={`
-                  relative h-20 rounded-2xl border-2 transition-all active:scale-95 flex flex-col items-center justify-center
-                  ${state === 'done' ? 'bg-emerald-500 border-emerald-600 text-white shadow-lg shadow-emerald-100' : 
-                    state === 'missed' ? 'bg-rose-500 border-rose-600 text-white shadow-lg shadow-rose-100' : 
-                    isToday ? 'bg-indigo-50 border-indigo-400 text-indigo-700' : 'bg-white border-transparent text-slate-400'}
+                  relative h-20 rounded-2xl border-2 transition-all duration-150 flex flex-col items-center justify-center no-select
+                  ${pressingThis ? 'scale-110 rotate-2 bg-slate-100' : 'active:scale-95'}
+                  ${state === 'done' ? 'bg-emerald-500 border-emerald-600 text-white shadow-md' : 
+                    state === 'missed' ? 'bg-rose-500 border-rose-600 text-white shadow-md' : 
+                    isToday ? 'bg-indigo-50 border-indigo-400 text-indigo-700' : 'bg-white border-transparent text-slate-300'}
                 `}
               >
                 {!state && (
                   <>
-                    <span className="text-[10px] font-bold uppercase opacity-60">
+                    <span className="text-[9px] font-bold uppercase opacity-60">
                       {date.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '')}
                     </span>
                     <span className="text-lg font-black">{date.getDate()}</span>
                   </>
                 )}
-                {state === 'done' && <LucideCheck size={32} strokeWidth={3} />}
-                {state === 'missed' && <LucideX size={32} strokeWidth={3} />}
+                {state === 'done' && <LucideCheck size={32} strokeWidth={3.5} className="animate-in zoom-in duration-300" />}
+                {state === 'missed' && <LucideX size={32} strokeWidth={3.5} className="animate-in zoom-in duration-300" />}
+                
                 {isToday && !state && (
-                    <span className="absolute -top-1 -right-1 h-3 w-3 bg-indigo-500 rounded-full animate-pulse border-2 border-white" />
+                  <span className="absolute -top-1 -right-1 h-3 w-3 bg-indigo-500 rounded-full border-2 border-white" />
                 )}
               </button>
             );
           })}
         </div>
 
-        {/* Reset */}
-        <div className="mt-12 flex justify-center">
-          <button 
-            onClick={() => { if(confirm("Tout effacer ?")) setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'progress'), { states: {} }); }}
-            className="text-slate-300 text-[10px] font-bold uppercase tracking-widest hover:text-slate-500"
-          >
-            Réinitialiser
-          </button>
+        <div className="mt-12 text-center space-y-4">
+            <div className="inline-flex items-center gap-4 px-4 py-2 bg-white rounded-full border border-slate-100 shadow-sm">
+                <div className="flex items-center gap-1">
+                    <div className="h-2 w-2 rounded-full bg-emerald-500"></div>
+                    <span className="text-[10px] font-bold text-slate-400">FAIT</span>
+                </div>
+                <div className="flex items-center gap-1">
+                    <div className="h-2 w-2 rounded-full bg-rose-500"></div>
+                    <span className="text-[10px] font-bold text-slate-400">OUBLI (LONG)</span>
+                </div>
+            </div>
+            
+            <button 
+                onClick={() => { if(confirm("Voulez-vous vraiment effacer tout le suivi de Maya ?")) setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'progress'), { states: {} }); }}
+                className="block mx-auto text-slate-300 text-[10px] font-bold uppercase tracking-widest pt-4"
+            >
+                Réinitialiser
+            </button>
         </div>
       </main>
-      
-      {/* Toast de sync */}
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-white/80 backdrop-blur px-4 py-2 rounded-full shadow-sm border border-slate-100 flex items-center gap-2">
-        <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Synchronisation Cloud Active</span>
-      </div>
     </div>
   );
 }
