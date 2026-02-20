@@ -15,6 +15,14 @@
         .is-long-pressing { transform: scale(1.1); background-color: #FFE4E6 !important; border-color: #FB7185 !important; }
         .completed-done { background-color: #22C55E !important; border-color: #16A34A !important; color: white !important; }
         .completed-missed { background-color: #F43F5E !important; border-color: #E11D48 !important; color: white !important; }
+        
+        @keyframes pulse-orange {
+            0% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.4); border-color: #fb923c; }
+            70% { box-shadow: 0 0 0 10px rgba(249, 115, 22, 0); border-color: #f97316; }
+            100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0); border-color: #fb923c; }
+        }
+        .needs-attention { animation: pulse-orange 2s infinite; border-width: 3px !important; }
+        
         #loader { position: fixed; inset: 0; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; transition: opacity 0.5s ease; }
     </style>
 </head>
@@ -22,7 +30,7 @@
 
     <div id="loader">
         <div class="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent mb-4"></div>
-        <p class="text-slate-500 font-bold text-sm">Connexion Cloud...</p>
+        <p class="text-slate-500 font-bold text-sm">Synchronisation Cloud...</p>
     </div>
 
     <header class="bg-white p-6 shadow-sm rounded-b-[40px] mb-6 flex justify-between items-center border-b border-slate-100">
@@ -30,20 +38,23 @@
             <h1 class="text-2xl font-extrabold text-slate-800 tracking-tight text-indigo-600">Suivi Maya ✨</h1>
             <div class="flex items-center gap-2">
                 <div id="status-dot" class="h-2 w-2 rounded-full bg-slate-300"></div>
-                <p id="status-text" class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Initialisation...</p>
+                <p id="status-text" class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Connexion...</p>
             </div>
         </div>
-        <div id="trophy" class="bg-indigo-50 p-4 rounded-2xl text-2xl transition-all duration-500">🦷</div>
+        <button onclick="enableNotifications()" id="notif-btn" class="bg-slate-100 p-3 rounded-2xl text-xl hover:bg-indigo-100 transition-colors">
+            🔔
+        </button>
     </header>
 
     <main class="max-w-md mx-auto px-6">
-        <div class="bg-slate-900 rounded-[32px] p-6 text-white mb-8 shadow-2xl">
+        <div class="bg-slate-900 rounded-[32px] p-6 text-white mb-8 shadow-2xl relative overflow-hidden">
+            <div id="time-alert" class="hidden absolute top-0 right-0 bg-orange-500 text-[8px] font-black px-3 py-1 rounded-bl-lg uppercase tracking-tighter">C'est l'heure de 19h ! ⏳</div>
             <div class="flex justify-between items-end mb-4">
                 <div>
                     <p class="text-indigo-300 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">Objectif Sourire</p>
                     <h2 class="text-5xl font-black italic" id="counter">0 / 30</h2>
                 </div>
-                <p id="message" class="text-indigo-400 font-bold text-sm leading-tight max-w-[120px] text-right text-balance">Chargement...</p>
+                <p id="message" class="text-indigo-400 font-bold text-sm leading-tight max-w-[120px] text-right">Chargement...</p>
             </div>
             <div class="w-full bg-slate-800 h-4 rounded-full overflow-hidden p-1">
                 <div id="progress-bar" class="bg-gradient-to-r from-indigo-500 to-emerald-400 h-full rounded-full transition-all duration-1000 ease-out" style="width: 0%"></div>
@@ -52,35 +63,33 @@
 
         <div class="grid grid-cols-4 gap-3" id="grid"></div>
 
-        <div class="mt-8 flex justify-center gap-6">
-            <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-emerald-500"></div><span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Court = OK</span></div>
-            <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-rose-500"></div><span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Long = Oubli</span></div>
+        <div class="mt-8 flex justify-center gap-6 text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+            <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-emerald-500"></div>Fait</div>
+            <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-rose-500"></div>Oubli</div>
+            <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-orange-500"></div>À faire !</div>
         </div>
 
-        <button onclick="confirmReset()" class="block mx-auto mt-12 text-slate-300 text-[10px] font-bold uppercase tracking-[0.2em]">Réinitialiser</button>
+        <button onclick="confirmReset()" class="block mx-auto mt-12 text-slate-300 text-[10px] font-bold uppercase tracking-[0.2em]">Réinitialiser le suivi</button>
     </main>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
         import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-database.js";
 
-        // ==========================================
-        // REMPLACER PAR VOS INFOS
-        // ==========================================
+        // Configuration personnelle de votre projet Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyBw6soSae9hhG1I79KDcl0P6NdeBR2xLLs",
-            databaseURL: "https://mon-sourire-default-rtdb.europe-west1.firebasedatabase.app", // Ex: https://xxx.firebaseio.com
+            databaseURL: "https://mon-sourire-default-rtdb.europe-west1.firebasedatabase.app",
             projectId: "mon-sourire",
             appId: "1:891324344626:web:b3a769bbe2298f85654f2b"
         };
-        // ==========================================
 
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
         const dataRef = ref(db, 'suivi/maya');
 
         const totalDays = 30;
-        const startDate = new Date(2026, 1, 20);
+        const startDate = new Date(2026, 1, 20); // Date fixée au 20 Février 2026
         let daysState = {};
         let pressTimer;
         let pressStartTime;
@@ -89,60 +98,120 @@
             onValue(dataRef, (snapshot) => {
                 daysState = snapshot.val() || {};
                 render();
+                checkTimeAndAlert();
                 document.getElementById('status-dot').className = "h-2 w-2 rounded-full bg-emerald-500 animate-pulse";
-                document.getElementById('status-text').innerText = "Cloud (Gratuit) Connecté";
+                document.getElementById('status-text').innerText = "Maya Cloud Sync OK";
                 document.getElementById('loader').style.opacity = '0';
                 setTimeout(() => document.getElementById('loader').style.display = 'none', 500);
-            }, (error) => {
-                document.getElementById('status-text').innerText = "Erreur de Droits";
             });
+            
+            // Vérification toutes les minutes pour le rappel de 19h
+            setInterval(checkTimeAndAlert, 60000);
         }
+
+        function checkTimeAndAlert() {
+            const now = new Date();
+            const hours = now.getHours();
+            const todayKey = now.toISOString().split('T')[0];
+            const timeAlert = document.getElementById('time-alert');
+            
+            // Alerte si après 19h et rien n'a été coché aujourd'hui
+            if (hours >= 19 && !daysState[todayKey]) {
+                timeAlert.classList.remove('hidden');
+            } else {
+                timeAlert.classList.add('hidden');
+            }
+        }
+
+        window.enableNotifications = () => {
+            if (!("Notification" in window)) {
+                alert("Les notifications ne sont pas supportées sur ce téléphone.");
+                return;
+            }
+            Notification.requestPermission().then(permission => {
+                if (permission === "granted") {
+                    document.getElementById('notif-btn').innerText = "✅";
+                    document.getElementById('notif-btn').classList.add('text-emerald-500');
+                    new Notification("Maya ✨", { 
+                        body: "Super ! Je te rappellerai de resserrer les dents à 19h.",
+                        icon: "https://cdn-icons-png.flaticon.com/512/2818/2818366.png"
+                    });
+                }
+            });
+        };
 
         function render() {
             const grid = document.getElementById('grid');
-            let done = 0;
+            let doneCount = 0;
+            const now = new Date();
+            const todayStr = now.toISOString().split('T')[0];
+            const isAfter19h = now.getHours() >= 19;
+
             grid.innerHTML = '';
             for (let i = 0; i < totalDays; i++) {
-                const date = new Date(startDate); date.setDate(startDate.getDate() + i);
+                const date = new Date(startDate); 
+                date.setDate(startDate.getDate() + i);
                 const key = date.toISOString().split('T')[0];
                 const state = daysState[key];
-                if (state === 'done') done++;
+                
+                if (state === 'done') doneCount++;
 
                 const btn = document.createElement('button');
                 btn.className = `day-btn h-20 rounded-[22px] border-2 flex flex-col items-center justify-center font-bold `;
-                if (state === 'done') { btn.classList.add('completed-done'); btn.innerHTML = '✅'; }
-                else if (state === 'missed') { btn.classList.add('completed-missed'); btn.innerHTML = '❌'; }
-                else {
+                
+                if (state === 'done') {
+                    btn.classList.add('completed-done');
+                    btn.innerHTML = '✅';
+                } else if (state === 'missed') {
+                    btn.classList.add('completed-missed');
+                    btn.innerHTML = '❌';
+                } else {
                     btn.classList.add('bg-white', 'border-slate-100', 'text-slate-400');
                     btn.innerHTML = `<span class="text-[9px] opacity-50 uppercase">${date.toLocaleDateString('fr-FR', {weekday:'short'})}</span><span class="text-xl">${date.getDate()}</span>`;
+                    
+                    // Animation si c'est aujourd'hui et qu'il est l'heure
+                    if (key === todayStr && isAfter19h) {
+                        btn.classList.add('needs-attention');
+                    }
                 }
 
-                const start = () => { pressStartTime = Date.now(); btn.classList.add('is-pressing'); pressTimer = setTimeout(() => btn.classList.add('is-long-pressing'), 600); };
-                const end = (e) => {
+                const start = () => { 
+                    pressStartTime = Date.now(); 
+                    btn.classList.add('is-pressing'); 
+                    pressTimer = setTimeout(() => btn.classList.add('is-long-pressing'), 600); 
+                };
+                
+                const end = () => {
                     const dur = Date.now() - pressStartTime;
                     clearTimeout(pressTimer);
                     btn.classList.remove('is-pressing', 'is-long-pressing');
-                    if (dur >= 600) { handle(key, 'missed'); } else if (dur > 50) { handle(key, 'done'); }
+                    if (dur >= 600) handle(key, 'missed'); else if (dur > 50) handle(key, 'done');
                 };
 
-                btn.onmousedown = start; btn.onmouseup = end;
+                btn.onmousedown = start; 
+                btn.onmouseup = end;
                 btn.ontouchstart = (e) => { e.preventDefault(); start(); };
                 btn.ontouchend = (e) => { e.preventDefault(); end(); };
                 grid.appendChild(btn);
             }
-            document.getElementById('counter').innerText = `${done} / ${totalDays}`;
-            document.getElementById('progress-bar').style.width = `${(done/totalDays)*100}%`;
-            document.getElementById('message').innerText = done === totalDays ? "Gagné ! 🎉" : "Continue Maya ! ✨";
+            
+            document.getElementById('counter').innerText = `${doneCount} / ${totalDays}`;
+            document.getElementById('progress-bar').style.width = `${(doneCount/totalDays)*100}%`;
+            document.getElementById('message').innerText = doneCount === totalDays ? "Gagné Maya ! 🎉" : (isAfter19h && !daysState[todayStr] ? "Vite Maya ! 🦷" : "Bravo Maya ! ✨");
         }
 
         function handle(key, type) {
-            const s = {...daysState};
-            if (s[key] === type) delete s[key]; else s[key] = type;
-            set(dataRef, s);
-            if (type === 'done' && Object.values(s).filter(v => v === 'done').length === totalDays) confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+            const newState = {...daysState};
+            if (newState[key] === type) delete newState[key]; else newState[key] = type;
+            set(dataRef, newState);
+            
+            if (type === 'done' && Object.values(newState).filter(v => v === 'done').length === totalDays) {
+                confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+            }
         }
 
-        window.confirmReset = () => { if(confirm("Effacer pour tout le monde ?")) set(dataRef, null); };
+        window.confirmReset = () => { if(confirm("Effacer tout le suivi de Maya ?")) set(dataRef, null); };
+        
         init();
     </script>
 </body>
