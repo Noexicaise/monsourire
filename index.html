@@ -26,25 +26,29 @@
             position: relative;
         }
 
-        /* Animation quand on appuie longtemps */
+        /* Animation de pression */
         .is-pressing { 
-            transform: scale(1.1) rotate(2deg); 
-            background-color: #FFF1F2 !important; 
-            border-color: #FDA4AF !important; 
+            transform: scale(0.92);
+            filter: brightness(0.9);
+        }
+
+        /* État "En cours d'appui long" */
+        .is-long-pressing {
+            transform: scale(1.1);
+            background-color: #FFE4E6 !important;
+            border-color: #FB7185 !important;
         }
 
         .completed-done {
             background-color: #22C55E !important;
             border-color: #16A34A !important;
             color: white !important;
-            box-shadow: 0 10px 15px -3px rgba(34, 197, 94, 0.2);
         }
 
         .completed-missed {
             background-color: #F43F5E !important;
             border-color: #E11D48 !important;
             color: white !important;
-            box-shadow: 0 10px 15px -3px rgba(244, 63, 94, 0.2);
         }
     </style>
 </head>
@@ -53,21 +57,20 @@
     <header class="bg-white p-6 shadow-sm rounded-b-[40px] mb-6 flex justify-between items-center border-b border-slate-100">
         <div>
             <h1 class="text-2xl font-extrabold text-slate-800 tracking-tight text-indigo-600">Suivi Maya ✨</h1>
-            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Enregistré sur ce téléphone</p>
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Enregistré localement</p>
         </div>
         <div id="trophy" class="bg-indigo-50 p-4 rounded-2xl text-2xl transition-all duration-500">🦷</div>
     </header>
 
     <main class="max-w-md mx-auto px-6">
-        <!-- Dashboard -->
-        <div class="bg-slate-900 rounded-[32px] p-6 text-white mb-8 shadow-2xl relative overflow-hidden">
+        <div class="bg-slate-900 rounded-[32px] p-6 text-white mb-8 shadow-2xl">
             <div class="flex justify-between items-end mb-4">
                 <div>
-                    <p class="text-indigo-300 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">Progression</p>
+                    <p class="text-indigo-300 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">Objectif Sourire</p>
                     <h2 class="text-5xl font-black italic" id="counter">0 / 30</h2>
                 </div>
                 <div class="text-right">
-                    <p id="message" class="text-indigo-400 font-bold text-sm leading-tight max-w-[120px]">Prête ? 💪</p>
+                    <p id="message" class="text-indigo-400 font-bold text-sm leading-tight max-w-[120px]">C'est parti ! 💪</p>
                 </div>
             </div>
             <div class="w-full bg-slate-800 h-4 rounded-full overflow-hidden p-1">
@@ -75,33 +78,21 @@
             </div>
         </div>
 
-        <div class="flex justify-between items-center mb-6 px-2">
-            <div class="flex items-center gap-2">
-                <div class="w-3 h-3 rounded-full bg-emerald-500"></div>
-                <span class="text-[9px] font-bold text-slate-400 uppercase">Appui court = OK</span>
-            </div>
-            <div class="flex items-center gap-2">
-                <div class="w-3 h-3 rounded-full bg-rose-500"></div>
-                <span class="text-[9px] font-bold text-slate-400 uppercase">Appui long = Oubli</span>
-            </div>
-        </div>
-
-        <!-- Grille -->
         <div class="grid grid-cols-4 gap-3" id="grid"></div>
 
-        <button onclick="confirmReset()" class="block mx-auto mt-12 text-slate-300 text-[10px] font-bold uppercase tracking-[0.2em] hover:text-rose-400 transition-colors">
-            Réinitialiser le mois
+        <button onclick="confirmReset()" class="block mx-auto mt-12 text-slate-300 text-[10px] font-bold uppercase tracking-[0.2em]">
+            Réinitialiser
         </button>
     </main>
 
     <script>
-        const STORAGE_KEY = 'maya_tracker_data_v2';
+        const STORAGE_KEY = 'maya_tracker_v3';
         const totalDays = 30;
-        const startDate = new Date(2026, 1, 20); // 20 Février
+        const startDate = new Date(2026, 1, 20);
         
         let daysState = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
-        let pressTimer;
-        let isLongPress = false;
+        let timer;
+        let startTime;
 
         function render() {
             const grid = document.getElementById('grid');
@@ -124,67 +115,69 @@
                 if (state === 'done') doneCount++;
 
                 const btn = document.createElement('button');
-                btn.className = `day-btn h-20 rounded-[24px] border-2 flex flex-col items-center justify-center `;
+                btn.className = `day-btn h-20 rounded-[22px] border-2 flex flex-col items-center justify-center font-bold `;
                 
                 if (state === 'done') {
                     btn.classList.add('completed-done');
-                    btn.innerHTML = '<svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="4" d="M5 13l4 4L19 7"></path></svg>';
+                    btn.innerHTML = '✅';
                 } else if (state === 'missed') {
                     btn.classList.add('completed-missed');
-                    btn.innerHTML = '<svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="4" d="M6 18L18 6M6 6l12 12"></path></svg>';
+                    btn.innerHTML = '❌';
                 } else {
                     btn.classList.add(isToday ? 'bg-indigo-50' : 'bg-white', isToday ? 'border-indigo-400' : 'border-slate-100', isToday ? 'text-indigo-600' : 'text-slate-400');
                     btn.innerHTML = `
-                        <span class="text-[9px] font-black uppercase opacity-50 mb-0.5">${date.toLocaleDateString('fr-FR', { weekday: 'short' })}</span>
-                        <span class="text-xl font-black">${date.getDate()}</span>
+                        <span class="text-[9px] uppercase opacity-50">${date.toLocaleDateString('fr-FR', { weekday: 'short' })}</span>
+                        <span class="text-xl">${date.getDate()}</span>
                     `;
                 }
 
-                // GESTION MOBILE & DESKTOP
-                const start = (e) => {
-                    isLongPress = false;
+                // GESTION UNIFIÉE DES ÉVÉNEMENTS
+                const onStart = (e) => {
+                    startTime = Date.now();
                     btn.classList.add('is-pressing');
-                    pressTimer = setTimeout(() => {
-                        isLongPress = true;
+                    
+                    timer = setTimeout(() => {
+                        btn.classList.add('is-long-pressing');
+                        if (navigator.vibrate) navigator.vibrate(50);
+                    }, 600);
+                };
+
+                const onEnd = (e) => {
+                    const duration = Date.now() - startTime;
+                    clearTimeout(timer);
+                    btn.classList.remove('is-pressing', 'is-long-pressing');
+
+                    // Si on relâche après 600ms = Oubli
+                    if (duration >= 600) {
                         handleAction(dateKey, 'missed');
-                        btn.classList.remove('is-pressing');
-                        if (navigator.vibrate) navigator.vibrate(60);
-                    }, 700);
-                };
-
-                const end = (e) => {
-                    btn.classList.remove('is-pressing');
-                    clearTimeout(pressTimer);
-                };
-
-                btn.onmousedown = start;
-                btn.ontouchstart = (e) => { e.preventDefault(); start(); };
-                btn.onmouseup = end;
-                btn.ontouchend = (e) => { e.preventDefault(); end(); };
-                btn.onmouseleave = end;
-
-                btn.onclick = () => {
-                    if (!isLongPress) {
+                    } 
+                    // Si on relâche vite = Fait
+                    else if (duration > 50) { 
                         handleAction(dateKey, 'done');
                     }
                 };
 
+                // Desktop
+                btn.onmousedown = onStart;
+                btn.onmouseup = onEnd;
+                btn.onmouseleave = () => { clearTimeout(timer); btn.classList.remove('is-pressing', 'is-long-pressing'); };
+
+                // Mobile
+                btn.ontouchstart = (e) => { e.preventDefault(); onStart(); };
+                btn.ontouchend = (e) => { e.preventDefault(); onEnd(); };
+
                 grid.appendChild(btn);
             }
 
-            // Stats
             counter.innerText = `${doneCount} / ${totalDays}`;
-            const perc = (doneCount / totalDays) * 100;
-            progress.style.width = `${perc}%`;
+            progress.style.width = `${(doneCount / totalDays) * 100}%`;
 
             if (doneCount === totalDays) {
-                msg.innerText = "Bravo Maya tu y es arrivée ! 🎉";
+                msg.innerText = "Bravo Maya, tu y es arrivée ! 🎉";
                 trophy.innerHTML = '🏆';
-                trophy.classList.add('scale-125', 'bg-yellow-100', 'rotate-12');
+                trophy.classList.add('scale-125', 'bg-yellow-100');
             } else {
-                msg.innerText = doneCount > 0 ? "Bravo Maya ! ✨" : "C'est parti ! 🚀";
-                trophy.innerHTML = '🦷';
-                trophy.classList.remove('scale-125', 'bg-yellow-100', 'rotate-12');
+                msg.innerText = doneCount > 15 ? "Déjà la moitié ! 🔥" : "Continue Maya ! ✨";
             }
         }
 
@@ -194,29 +187,22 @@
             } else {
                 daysState[dateKey] = type;
             }
-            
             localStorage.setItem(STORAGE_KEY, JSON.stringify(daysState));
             render();
 
             if (type === 'done' && Object.values(daysState).filter(v => v === 'done').length === totalDays) {
-                confetti({
-                    particleCount: 150,
-                    spread: 70,
-                    origin: { y: 0.6 },
-                    colors: ['#6366F1', '#10B981', '#F43F5E']
-                });
+                confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
             }
         }
 
         window.confirmReset = () => {
-            if (confirm("Effacer tout le suivi de Maya ?")) {
+            if (confirm("Effacer tout le suivi ?")) {
                 daysState = {};
                 localStorage.removeItem(STORAGE_KEY);
                 render();
             }
         };
 
-        // Initialisation
         render();
     </script>
 </body>
