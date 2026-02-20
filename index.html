@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mon Suivi Sourire 🦷</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
+        
+        body {
+            font-family: 'Plus+Jakarta+Sans', sans-serif;
+            background-color: #F8FAFC;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .day-card {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .day-card:active {
+            transform: scale(0.90);
+        }
+
+        .completed {
+            background-color: #22C55E !important;
+            border-color: #16A34A !important;
+            color: white !important;
+            box-shadow: 0 10px 15px -3px rgba(34, 197, 94, 0.2);
+        }
+
+        .completed-icon {
+            display: none;
+        }
+
+        .completed .completed-icon {
+            display: block;
+        }
+
+        .completed .day-label {
+            display: none;
+        }
+
+        .is-today {
+            border-color: #6366F1 !important;
+            background-color: #EEF2FF;
+        }
+
+        @keyframes scaleIn {
+            from { transform: scale(0); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .completed .completed-icon {
+            animation: scaleIn 0.3s ease-out;
+        }
+
+        @keyframes dance {
+            0%, 100% { transform: translateY(0) rotate(0); }
+            25% { transform: translateY(-10px) rotate(-5deg); }
+            75% { transform: translateY(-10px) rotate(5deg); }
+        }
+
+        .dance {
+            animation: dance 1s infinite;
+        }
+    </style>
+</head>
+<body class="min-h-screen pb-20">
+
+    <header class="bg-white p-6 shadow-sm rounded-b-[40px] mb-8 border-b border-slate-100">
+        <div class="max-w-md mx-auto flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Mon Suivi ✨</h1>
+                <p class="text-slate-500 text-sm font-medium">Débuté le 20/02</p>
+            </div>
+            <div id="toothIcon" class="bg-indigo-50 p-4 rounded-3xl transition-all duration-500">
+                <span class="text-2xl">🦷</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-md mx-auto px-6">
+        
+        <div class="bg-slate-900 rounded-[32px] p-6 text-white mb-10 shadow-2xl shadow-slate-200">
+            <div class="flex justify-between items-end mb-4">
+                <div>
+                    <p class="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Progression</p>
+                    <h2 class="text-4xl font-black" id="counter">0 / 30</h2>
+                </div>
+                <div class="text-right pb-1 max-w-[150px]">
+                    <p class="text-indigo-400 text-sm font-bold leading-tight" id="message">Prête ? 💪</p>
+                </div>
+            </div>
+            <div class="w-full bg-slate-800 h-4 rounded-full overflow-hidden p-1">
+                <div id="progressBar" class="bg-gradient-to-r from-indigo-500 to-emerald-400 h-full rounded-full transition-all duration-700 ease-out" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-4 gap-3" id="gridContainer"></div>
+
+        <div class="mt-16 flex flex-col items-center gap-6">
+            <p class="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em]">Options</p>
+            <button onclick="confirmReset()" class="bg-white border border-slate-200 text-slate-400 px-6 py-3 rounded-2xl text-xs font-bold hover:bg-slate-50 transition-colors">
+                Réinitialiser le suivi
+            </button>
+        </div>
+    </main>
+
+    <script>
+        const totalDays = 30;
+        const startDate = new Date(2026, 1, 20); // 20 Février 2026
+        let completedDays = JSON.parse(localStorage.getItem('disjoncteur_progress_dates')) || [];
+
+        function initApp() {
+            const container = document.getElementById('gridContainer');
+            container.innerHTML = '';
+            
+            const now = new Date();
+            const todayStr = `${now.getDate()}/${now.getMonth()}`;
+
+            for (let i = 0; i < totalDays; i++) {
+                const currentDate = new Date(startDate);
+                currentDate.setDate(startDate.getDate() + i);
+                
+                const dayNum = currentDate.getDate();
+                const dayName = currentDate.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '');
+                const dateKey = `${dayNum}/${currentDate.getMonth()}`;
+                
+                const dayBtn = document.createElement('button');
+                const isToday = todayStr === dateKey;
+
+                dayBtn.className = `day-card h-20 w-full rounded-2xl border-2 bg-white shadow-sm flex flex-col items-center justify-center ${isToday ? 'is-today' : 'border-transparent'}`;
+                
+                if (completedDays.includes(dateKey)) {
+                    dayBtn.classList.add('completed');
+                }
+
+                dayBtn.innerHTML = `
+                    <div class="day-label flex flex-col items-center">
+                        <span class="text-[10px] uppercase text-slate-400 font-bold">${dayName}</span>
+                        <span class="text-lg font-extrabold ${isToday ? 'text-indigo-600' : 'text-slate-700'}">${dayNum}</span>
+                    </div>
+                    <svg class="completed-icon w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3.5" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    ${isToday ? '<span class="absolute -top-1 -right-1 flex h-3 w-3"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3 w-3 bg-indigo-500"></span></span>' : ''}
+                `;
+
+                dayBtn.style.position = 'relative';
+                dayBtn.onclick = () => toggleDay(dateKey, dayBtn);
+                container.appendChild(dayBtn);
+            }
+            updateStats();
+        }
+
+        function toggleDay(dateKey, element) {
+            if (completedDays.includes(dateKey)) {
+                completedDays = completedDays.filter(d => d !== dateKey);
+                element.classList.remove('completed');
+            } else {
+                completedDays.push(dateKey);
+                element.classList.add('completed');
+                if (window.navigator.vibrate) window.navigator.vibrate([40, 30, 40]);
+                
+                // Si c'est le 30ème jour
+                if (completedDays.length === totalDays) {
+                    launchConfetti();
+                }
+            }
+            localStorage.setItem('disjoncteur_progress_dates', JSON.stringify(completedDays));
+            updateStats();
+        }
+
+        function launchConfetti() {
+            const duration = 5 * 1000;
+            const animationEnd = Date.now() + duration;
+            const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
+
+            const randomInRange = (min, max) => Math.random() * (max - min) + min;
+
+            const interval = setInterval(function() {
+                const timeLeft = animationEnd - Date.now();
+
+                if (timeLeft <= 0) {
+                    return clearInterval(interval);
+                }
+
+                const particleCount = 50 * (timeLeft / duration);
+                confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } });
+                confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });
+            }, 250);
+        }
+
+        function updateStats() {
+            const count = completedDays.length;
+            document.getElementById('counter').innerText = `${count} / ${totalDays}`;
+            
+            const progress = (count / totalDays) * 100;
+            document.getElementById('progressBar').style.width = `${progress}%`;
+
+            const msg = document.getElementById('message');
+            const icon = document.getElementById('toothIcon');
+
+            if (count === 0) {
+                msg.innerText = "Prête ? 💪";
+            } else if (count < 10) {
+                msg.innerText = "C'est un super début ! ⭐";
+            } else if (count < 20) {
+                msg.innerText = "Déjà la moitié Maya ! 🔥";
+            } else if (count < 30) {
+                msg.innerText = "Presque au bout ! 🌈";
+            } else {
+                msg.innerText = "Bravo Maya, tu y es arrivée ! 🎉";
+                msg.classList.add('text-emerald-400');
+                icon.classList.add('dance', 'bg-emerald-100');
+                icon.innerHTML = '<span class="text-2xl">🏆</span>';
+            }
+        }
+
+        function confirmReset() {
+            if (confirm("Veux-tu vraiment effacer ton suivi ?")) {
+                completedDays = [];
+                const icon = document.getElementById('toothIcon');
+                icon.classList.remove('dance', 'bg-emerald-100');
+                icon.innerHTML = '<span class="text-2xl">🦷</span>';
+                localStorage.removeItem('disjoncteur_progress_dates');
+                initApp();
+            }
+        }
+
+        window.onload = initApp;
+    </script>
+</body>
+</html>
