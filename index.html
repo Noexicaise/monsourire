@@ -2,9 +2,11 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Mon Suivi Sourire 🦷</title>
+    <!-- Utilisation de Tailwind CSS pour un design moderne -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Bibliothèque pour l'effet de confettis -->
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
@@ -20,10 +22,12 @@
             transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
+        /* Effet au clic */
         .day-card:active {
             transform: scale(0.90);
         }
 
+        /* État quand le jour est validé */
         .completed {
             background-color: #22C55E !important;
             border-color: #16A34A !important;
@@ -43,9 +47,11 @@
             display: none;
         }
 
+        /* Style pour mettre en évidence aujourd'hui */
         .is-today {
             border-color: #6366F1 !important;
             background-color: #EEF2FF;
+            position: relative;
         }
 
         @keyframes scaleIn {
@@ -57,6 +63,7 @@
             animation: scaleIn 0.3s ease-out;
         }
 
+        /* Animation de victoire finale */
         @keyframes dance {
             0%, 100% { transform: translateY(0) rotate(0); }
             25% { transform: translateY(-10px) rotate(-5deg); }
@@ -74,7 +81,7 @@
         <div class="max-w-md mx-auto flex justify-between items-center">
             <div>
                 <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Mon Suivi ✨</h1>
-                <p class="text-slate-500 text-sm font-medium">Débuté le 20/02</p>
+                <p class="text-slate-500 text-sm font-medium italic">Pour Maya</p>
             </div>
             <div id="toothIcon" class="bg-indigo-50 p-4 rounded-3xl transition-all duration-500">
                 <span class="text-2xl">🦷</span>
@@ -84,27 +91,30 @@
 
     <main class="max-w-md mx-auto px-6">
         
+        <!-- Carte de score et progression -->
         <div class="bg-slate-900 rounded-[32px] p-6 text-white mb-10 shadow-2xl shadow-slate-200">
             <div class="flex justify-between items-end mb-4">
                 <div>
-                    <p class="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Progression</p>
+                    <p class="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1 text-indigo-300">Progression</p>
                     <h2 class="text-4xl font-black" id="counter">0 / 30</h2>
                 </div>
                 <div class="text-right pb-1 max-w-[150px]">
-                    <p class="text-indigo-400 text-sm font-bold leading-tight" id="message">Prête ? 💪</p>
+                    <p class="text-indigo-400 text-sm font-bold leading-tight" id="message">Prête pour aujourd'hui ? 💪</p>
                 </div>
             </div>
             <div class="w-full bg-slate-800 h-4 rounded-full overflow-hidden p-1">
-                <div id="progressBar" class="bg-gradient-to-r from-indigo-500 to-emerald-400 h-full rounded-full transition-all duration-700 ease-out" style="width: 0%"></div>
+                <div id="progressBar" class="bg-gradient-to-r from-indigo-500 to-emerald-400 h-full rounded-full transition-all duration-1000 ease-out" style="width: 0%"></div>
             </div>
         </div>
 
+        <!-- Grille des jours -->
         <div class="grid grid-cols-4 gap-3" id="gridContainer"></div>
 
+        <!-- Section des options -->
         <div class="mt-16 flex flex-col items-center gap-6">
-            <p class="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em]">Options</p>
-            <button onclick="confirmReset()" class="bg-white border border-slate-200 text-slate-400 px-6 py-3 rounded-2xl text-xs font-bold hover:bg-slate-50 transition-colors">
-                Réinitialiser le suivi
+            <p class="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em]">Paramètres</p>
+            <button onclick="confirmReset()" class="bg-white border border-slate-200 text-slate-400 px-6 py-3 rounded-2xl text-xs font-bold hover:bg-slate-50 transition-colors active:bg-slate-100">
+                Réinitialiser tout le mois
             </button>
         </div>
     </main>
@@ -112,14 +122,20 @@
     <script>
         const totalDays = 30;
         const startDate = new Date(2026, 1, 20); // 20 Février 2026
-        let completedDays = JSON.parse(localStorage.getItem('disjoncteur_progress_dates')) || [];
+        
+        // Clé unique pour GitHub Pages afin d'éviter les conflits avec d'autres apps
+        const STORAGE_KEY = 'maya_sourire_v1';
+        
+        // Chargement des données sauvegardées
+        let completedDays = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
 
         function initApp() {
             const container = document.getElementById('gridContainer');
             container.innerHTML = '';
             
             const now = new Date();
-            const todayStr = `${now.getDate()}/${now.getMonth()}`;
+            // Création d'un format de date comparable (ex: "2026-02-20")
+            const todayStr = now.toISOString().split('T')[0];
 
             for (let i = 0; i < totalDays; i++) {
                 const currentDate = new Date(startDate);
@@ -127,7 +143,7 @@
                 
                 const dayNum = currentDate.getDate();
                 const dayName = currentDate.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '');
-                const dateKey = `${dayNum}/${currentDate.getMonth()}`;
+                const dateKey = currentDate.toISOString().split('T')[0];
                 
                 const dayBtn = document.createElement('button');
                 const isToday = todayStr === dateKey;
@@ -149,7 +165,6 @@
                     ${isToday ? '<span class="absolute -top-1 -right-1 flex h-3 w-3"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3 w-3 bg-indigo-500"></span></span>' : ''}
                 `;
 
-                dayBtn.style.position = 'relative';
                 dayBtn.onclick = () => toggleDay(dateKey, dayBtn);
                 container.appendChild(dayBtn);
             }
@@ -163,21 +178,25 @@
             } else {
                 completedDays.push(dateKey);
                 element.classList.add('completed');
+                
+                // Vibration sur mobile
                 if (window.navigator.vibrate) window.navigator.vibrate([40, 30, 40]);
                 
-                // Si c'est le 30ème jour
+                // Vérifier si c'est la fin du traitement
                 if (completedDays.length === totalDays) {
                     launchConfetti();
                 }
             }
-            localStorage.setItem('disjoncteur_progress_dates', JSON.stringify(completedDays));
+            
+            // Sauvegarde immédiate
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(completedDays));
             updateStats();
         }
 
         function launchConfetti() {
-            const duration = 5 * 1000;
+            const duration = 10 * 1000;
             const animationEnd = Date.now() + duration;
-            const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
+            const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 1000 };
 
             const randomInRange = (min, max) => Math.random() * (max - min) + min;
 
@@ -221,17 +240,19 @@
         }
 
         function confirmReset() {
-            if (confirm("Veux-tu vraiment effacer ton suivi ?")) {
+            if (confirm("Maya, es-tu sûre de vouloir effacer ton suivi ?")) {
                 completedDays = [];
+                localStorage.removeItem(STORAGE_KEY);
                 const icon = document.getElementById('toothIcon');
                 icon.classList.remove('dance', 'bg-emerald-100');
                 icon.innerHTML = '<span class="text-2xl">🦷</span>';
-                localStorage.removeItem('disjoncteur_progress_dates');
                 initApp();
             }
         }
 
+        // Lancement au chargement
         window.onload = initApp;
     </script>
 </body>
 </html>
+
