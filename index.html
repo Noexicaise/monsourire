@@ -1,258 +1,219 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Mon Suivi Sourire 🦷</title>
-    <!-- Utilisation de Tailwind CSS pour un design moderne -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Bibliothèque pour l'effet de confettis -->
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
-        
-        body {
-            font-family: 'Plus+Jakarta+Sans', sans-serif;
-            background-color: #F8FAFC;
-            touch-action: manipulation;
-            -webkit-tap-highlight-color: transparent;
-        }
+import React, { useState, useEffect, useRef } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
+import { getFirestore, doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
+import { LucideCheck, LucideX, LucideTrophy, LucideSettings2 } from 'lucide-react';
 
-        .day-card {
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        }
+// Configuration Firebase (Injectée par l'environnement)
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'disjoncteur-maya';
 
-        /* Effet au clic */
-        .day-card:active {
-            transform: scale(0.90);
-        }
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [daysState, setDaysState] = useState({}); // { 'dateKey': 'done' | 'missed' }
+  const [loading, setLoading] = useState(true);
+  const pressTimer = useRef(null);
 
-        /* État quand le jour est validé */
-        .completed {
-            background-color: #22C55E !important;
-            border-color: #16A34A !important;
-            color: white !important;
-            box-shadow: 0 10px 15px -3px rgba(34, 197, 94, 0.2);
-        }
+  const totalDays = 30;
+  const startDate = new Date(2026, 1, 20); // 20 Février 2026
 
-        .completed-icon {
-            display: none;
+  // 1. Authentification
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
         }
+      } catch (err) {
+        console.error("Auth error:", err);
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
+  }, []);
 
-        .completed .completed-icon {
-            display: block;
-        }
+  // 2. Synchronisation des données (Cloud)
+  useEffect(() => {
+    if (!user) return;
 
-        .completed .day-label {
-            display: none;
-        }
+    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'progress');
+    
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setDaysState(docSnap.data().states || {});
+      } else {
+        // Initialiser le document si inexistant
+        setDoc(docRef, { states: {} });
+      }
+      setLoading(false);
+    }, (err) => {
+      console.error("Firestore error:", err);
+      setLoading(false);
+    });
 
-        /* Style pour mettre en évidence aujourd'hui */
-        .is-today {
-            border-color: #6366F1 !important;
-            background-color: #EEF2FF;
-            position: relative;
-        }
+    return () => unsubscribe();
+  }, [user]);
 
-        @keyframes scaleIn {
-            from { transform: scale(0); opacity: 0; }
-            to { transform: scale(1); opacity: 1; }
-        }
+  // Actions
+  const updateDay = async (dateKey, status) => {
+    if (!user) return;
+    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'progress');
+    
+    const newState = { ...daysState };
+    if (newState[dateKey] === status) {
+      delete newState[dateKey]; // Toggle off
+    } else {
+      newState[dateKey] = status;
+    }
 
-        .completed .completed-icon {
-            animation: scaleIn 0.3s ease-out;
-        }
+    try {
+      await updateDoc(docRef, { states: newState });
+      if (status === 'done' && Object.values(newState).filter(s => s === 'done').length === totalDays) {
+        triggerConfetti();
+      }
+    } catch (err) {
+      console.error("Update error:", err);
+    }
+  };
 
-        /* Animation de victoire finale */
-        @keyframes dance {
-            0%, 100% { transform: translateY(0) rotate(0); }
-            25% { transform: translateY(-10px) rotate(-5deg); }
-            75% { transform: translateY(-10px) rotate(5deg); }
-        }
+  // Gestion Appui Long
+  const handleTouchStart = (dateKey) => {
+    pressTimer.current = setTimeout(() => {
+      updateDay(dateKey, 'missed');
+      if (window.navigator.vibrate) window.navigator.vibrate(100);
+    }, 800);
+  };
 
-        .dance {
-            animation: dance 1s infinite;
-        }
-    </style>
-</head>
-<body class="min-h-screen pb-20">
+  const handleTouchEnd = () => {
+    clearTimeout(pressTimer.current);
+  };
 
-    <header class="bg-white p-6 shadow-sm rounded-b-[40px] mb-8 border-b border-slate-100">
-        <div class="max-w-md mx-auto flex justify-between items-center">
+  const triggerConfetti = () => {
+    // Note: window.confetti est chargé via le script externe dans une app réelle
+    // Ici on simule ou on utilise une lib si disponible
+    if (window.confetti) {
+        window.confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+    }
+  };
+
+  // Calculs
+  const doneCount = Object.values(daysState).filter(s => s === 'done').length;
+  const progressPercent = (doneCount / totalDays) * 100;
+  
+  const getMessage = () => {
+    if (doneCount === 0) return "C'est parti Maya ! 💪";
+    if (doneCount === totalDays) return "Bravo Maya ! Tu as fini ! 🎉";
+    if (doneCount > 15) return "Plus que la moitié ! 🌈";
+    return "On continue comme ça ! ✨";
+  };
+
+  if (loading) return (
+    <div className="flex h-screen items-center justify-center bg-slate-50">
+      <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent"></div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-slate-50 pb-20 text-slate-900">
+      {/* Header */}
+      <header className="bg-white p-6 shadow-sm rounded-b-[40px] mb-8 flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-black text-slate-800">Mon Suivi 🦷</h1>
+          <p className="text-slate-500 text-sm">Synchronisé (Papa & Maman)</p>
+        </div>
+        <div className={`p-4 rounded-3xl ${doneCount === totalDays ? 'bg-yellow-100 animate-bounce' : 'bg-indigo-50'}`}>
+          {doneCount === totalDays ? <LucideTrophy className="text-yellow-600" /> : <span className="text-2xl">✨</span>}
+        </div>
+      </header>
+
+      <main className="max-w-md mx-auto px-6">
+        {/* Progress Card */}
+        <div className="bg-slate-900 rounded-[32px] p-6 text-white mb-8 shadow-xl shadow-slate-200">
+          <div className="flex justify-between items-end mb-4">
             <div>
-                <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Mon Suivi ✨</h1>
-                <p class="text-slate-500 text-sm font-medium italic">Pour Maya</p>
+              <p className="text-indigo-300 text-xs font-bold uppercase tracking-widest mb-1">Maya</p>
+              <h2 className="text-4xl font-black">{doneCount} / {totalDays}</h2>
             </div>
-            <div id="toothIcon" class="bg-indigo-50 p-4 rounded-3xl transition-all duration-500">
-                <span class="text-2xl">🦷</span>
-            </div>
-        </div>
-    </header>
-
-    <main class="max-w-md mx-auto px-6">
-        
-        <!-- Carte de score et progression -->
-        <div class="bg-slate-900 rounded-[32px] p-6 text-white mb-10 shadow-2xl shadow-slate-200">
-            <div class="flex justify-between items-end mb-4">
-                <div>
-                    <p class="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1 text-indigo-300">Progression</p>
-                    <h2 class="text-4xl font-black" id="counter">0 / 30</h2>
-                </div>
-                <div class="text-right pb-1 max-w-[150px]">
-                    <p class="text-indigo-400 text-sm font-bold leading-tight" id="message">Prête pour aujourd'hui ? 💪</p>
-                </div>
-            </div>
-            <div class="w-full bg-slate-800 h-4 rounded-full overflow-hidden p-1">
-                <div id="progressBar" class="bg-gradient-to-r from-indigo-500 to-emerald-400 h-full rounded-full transition-all duration-1000 ease-out" style="width: 0%"></div>
-            </div>
+            <p className="text-indigo-400 text-sm font-bold text-right max-w-[120px]">{getMessage()}</p>
+          </div>
+          <div className="w-full bg-slate-800 h-3 rounded-full overflow-hidden">
+            <div 
+              className="bg-gradient-to-r from-indigo-500 to-emerald-400 h-full transition-all duration-1000" 
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
         </div>
 
-        <!-- Grille des jours -->
-        <div class="grid grid-cols-4 gap-3" id="gridContainer"></div>
+        {/* Aide */}
+        <p className="text-center text-[10px] text-slate-400 uppercase font-bold tracking-widest mb-6">
+          Clic = Fait • Appui Long = Oubli
+        </p>
 
-        <!-- Section des options -->
-        <div class="mt-16 flex flex-col items-center gap-6">
-            <p class="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em]">Paramètres</p>
-            <button onclick="confirmReset()" class="bg-white border border-slate-200 text-slate-400 px-6 py-3 rounded-2xl text-xs font-bold hover:bg-slate-50 transition-colors active:bg-slate-100">
-                Réinitialiser tout le mois
-            </button>
+        {/* Grid */}
+        <div className="grid grid-cols-4 gap-3">
+          {Array.from({ length: totalDays }).map((_, i) => {
+            const date = new Date(startDate);
+            date.setDate(startDate.getDate() + i);
+            const dateKey = date.toISOString().split('T')[0];
+            const state = daysState[dateKey];
+            const isToday = new Date().toISOString().split('T')[0] === dateKey;
+
+            return (
+              <button
+                key={dateKey}
+                onMouseDown={() => handleTouchStart(dateKey)}
+                onMouseUp={handleTouchEnd}
+                onTouchStart={() => handleTouchStart(dateKey)}
+                onTouchEnd={handleTouchEnd}
+                onClick={() => updateDay(dateKey, 'done')}
+                className={`
+                  relative h-20 rounded-2xl border-2 transition-all active:scale-95 flex flex-col items-center justify-center
+                  ${state === 'done' ? 'bg-emerald-500 border-emerald-600 text-white shadow-lg shadow-emerald-100' : 
+                    state === 'missed' ? 'bg-rose-500 border-rose-600 text-white shadow-lg shadow-rose-100' : 
+                    isToday ? 'bg-indigo-50 border-indigo-400 text-indigo-700' : 'bg-white border-transparent text-slate-400'}
+                `}
+              >
+                {!state && (
+                  <>
+                    <span className="text-[10px] font-bold uppercase opacity-60">
+                      {date.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '')}
+                    </span>
+                    <span className="text-lg font-black">{date.getDate()}</span>
+                  </>
+                )}
+                {state === 'done' && <LucideCheck size={32} strokeWidth={3} />}
+                {state === 'missed' && <LucideX size={32} strokeWidth={3} />}
+                {isToday && !state && (
+                    <span className="absolute -top-1 -right-1 h-3 w-3 bg-indigo-500 rounded-full animate-pulse border-2 border-white" />
+                )}
+              </button>
+            );
+          })}
         </div>
-    </main>
 
-    <script>
-        const totalDays = 30;
-        const startDate = new Date(2026, 1, 20); // 20 Février 2026
-        
-        // Clé unique pour GitHub Pages afin d'éviter les conflits avec d'autres apps
-        const STORAGE_KEY = 'maya_sourire_v1';
-        
-        // Chargement des données sauvegardées
-        let completedDays = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-
-        function initApp() {
-            const container = document.getElementById('gridContainer');
-            container.innerHTML = '';
-            
-            const now = new Date();
-            // Création d'un format de date comparable (ex: "2026-02-20")
-            const todayStr = now.toISOString().split('T')[0];
-
-            for (let i = 0; i < totalDays; i++) {
-                const currentDate = new Date(startDate);
-                currentDate.setDate(startDate.getDate() + i);
-                
-                const dayNum = currentDate.getDate();
-                const dayName = currentDate.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '');
-                const dateKey = currentDate.toISOString().split('T')[0];
-                
-                const dayBtn = document.createElement('button');
-                const isToday = todayStr === dateKey;
-
-                dayBtn.className = `day-card h-20 w-full rounded-2xl border-2 bg-white shadow-sm flex flex-col items-center justify-center ${isToday ? 'is-today' : 'border-transparent'}`;
-                
-                if (completedDays.includes(dateKey)) {
-                    dayBtn.classList.add('completed');
-                }
-
-                dayBtn.innerHTML = `
-                    <div class="day-label flex flex-col items-center">
-                        <span class="text-[10px] uppercase text-slate-400 font-bold">${dayName}</span>
-                        <span class="text-lg font-extrabold ${isToday ? 'text-indigo-600' : 'text-slate-700'}">${dayNum}</span>
-                    </div>
-                    <svg class="completed-icon w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3.5" d="M5 13l4 4L19 7"></path>
-                    </svg>
-                    ${isToday ? '<span class="absolute -top-1 -right-1 flex h-3 w-3"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3 w-3 bg-indigo-500"></span></span>' : ''}
-                `;
-
-                dayBtn.onclick = () => toggleDay(dateKey, dayBtn);
-                container.appendChild(dayBtn);
-            }
-            updateStats();
-        }
-
-        function toggleDay(dateKey, element) {
-            if (completedDays.includes(dateKey)) {
-                completedDays = completedDays.filter(d => d !== dateKey);
-                element.classList.remove('completed');
-            } else {
-                completedDays.push(dateKey);
-                element.classList.add('completed');
-                
-                // Vibration sur mobile
-                if (window.navigator.vibrate) window.navigator.vibrate([40, 30, 40]);
-                
-                // Vérifier si c'est la fin du traitement
-                if (completedDays.length === totalDays) {
-                    launchConfetti();
-                }
-            }
-            
-            // Sauvegarde immédiate
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(completedDays));
-            updateStats();
-        }
-
-        function launchConfetti() {
-            const duration = 10 * 1000;
-            const animationEnd = Date.now() + duration;
-            const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 1000 };
-
-            const randomInRange = (min, max) => Math.random() * (max - min) + min;
-
-            const interval = setInterval(function() {
-                const timeLeft = animationEnd - Date.now();
-
-                if (timeLeft <= 0) {
-                    return clearInterval(interval);
-                }
-
-                const particleCount = 50 * (timeLeft / duration);
-                confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } });
-                confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });
-            }, 250);
-        }
-
-        function updateStats() {
-            const count = completedDays.length;
-            document.getElementById('counter').innerText = `${count} / ${totalDays}`;
-            
-            const progress = (count / totalDays) * 100;
-            document.getElementById('progressBar').style.width = `${progress}%`;
-
-            const msg = document.getElementById('message');
-            const icon = document.getElementById('toothIcon');
-
-            if (count === 0) {
-                msg.innerText = "Prête ? 💪";
-            } else if (count < 10) {
-                msg.innerText = "C'est un super début ! ⭐";
-            } else if (count < 20) {
-                msg.innerText = "Déjà la moitié Maya ! 🔥";
-            } else if (count < 30) {
-                msg.innerText = "Presque au bout ! 🌈";
-            } else {
-                msg.innerText = "Bravo Maya, tu y es arrivée ! 🎉";
-                msg.classList.add('text-emerald-400');
-                icon.classList.add('dance', 'bg-emerald-100');
-                icon.innerHTML = '<span class="text-2xl">🏆</span>';
-            }
-        }
-
-        function confirmReset() {
-            if (confirm("Maya, es-tu sûre de vouloir effacer ton suivi ?")) {
-                completedDays = [];
-                localStorage.removeItem(STORAGE_KEY);
-                const icon = document.getElementById('toothIcon');
-                icon.classList.remove('dance', 'bg-emerald-100');
-                icon.innerHTML = '<span class="text-2xl">🦷</span>';
-                initApp();
-            }
-        }
-
-        // Lancement au chargement
-        window.onload = initApp;
-    </script>
-</body>
-</html>
+        {/* Reset */}
+        <div className="mt-12 flex justify-center">
+          <button 
+            onClick={() => { if(confirm("Tout effacer ?")) setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'progress'), { states: {} }); }}
+            className="text-slate-300 text-[10px] font-bold uppercase tracking-widest hover:text-slate-500"
+          >
+            Réinitialiser
+          </button>
+        </div>
+      </main>
+      
+      {/* Toast de sync */}
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-white/80 backdrop-blur px-4 py-2 rounded-full shadow-sm border border-slate-100 flex items-center gap-2">
+        <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Synchronisation Cloud Active</span>
+      </div>
+    </div>
+  );
+}
 
