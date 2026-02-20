@@ -3,41 +3,108 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Mon Suivi Maya 🦷</title>
+    <title>Suivi Maya 🦷</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
+        * { 
+            -webkit-tap-highlight-color: transparent; 
+            -webkit-touch-callout: none; 
+            user-select: none;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+        body { background-color: #F8FAFC; }
+        .day-btn { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+        .is-pressing { transform: scale(1.15) rotate(3deg); background-color: #FFF1F2 !important; border-color: #FDA4AF !important; }
+        .progress-glow { box-shadow: 0 0 20px rgba(99, 102, 241, 0.3); }
+    </style>
+</head>
+<body class="pb-10">
+
+    <header class="bg-white p-6 shadow-sm rounded-b-[40px] mb-6 flex justify-between items-center border-b border-slate-100">
+        <div>
+            <h1 class="text-2xl font-extrabold text-slate-800 tracking-tight">Suivi Maya 🦷</h1>
+            <div class="flex items-center gap-2">
+                <div class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Synchronisé</p>
+            </div>
+        </div>
+        <div id="trophy" class="bg-indigo-50 p-4 rounded-2xl text-2xl transition-all duration-500">✨</div>
+    </header>
+
+    <main class="max-w-md mx-auto px-6">
+        <!-- Dashboard -->
+        <div class="bg-slate-900 rounded-[32px] p-6 text-white mb-8 shadow-2xl relative overflow-hidden">
+            <div class="relative z-10">
+                <div class="flex justify-between items-end mb-4">
+                    <div>
+                        <p class="text-indigo-300 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">Objectif Sourire</p>
+                        <h2 class="text-5xl font-black italic" id="counter">0 / 30</h2>
+                    </div>
+                    <div class="text-right">
+                        <p id="message" class="text-indigo-400 font-bold text-sm leading-tight max-w-[100px]">Chargement...</p>
+                    </div>
+                </div>
+                <div class="w-full bg-slate-800 h-4 rounded-full overflow-hidden p-1">
+                    <div id="progress-bar" class="bg-gradient-to-r from-indigo-500 to-emerald-400 h-full rounded-full transition-all duration-1000 ease-out" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <p class="text-center text-[9px] text-slate-400 uppercase font-black tracking-[0.3em] mb-6 opacity-60">
+            Appui court = OK • Appui long = Oubli
+        </p>
+
+        <!-- Grille -->
+        <div class="grid grid-cols-4 gap-3" id="grid"></div>
+
+        <button onclick="confirmReset()" class="block mx-auto mt-12 text-slate-300 text-[10px] font-bold uppercase tracking-[0.2em] hover:text-rose-400 transition-colors">
+            Réinitialiser le mois
+        </button>
+    </main>
+
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
         import { getFirestore, doc, onSnapshot, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
 
-        // --- CONFIGURATION ---
-        const firebaseConfig = JSON.parse('__firebase_config_placeholder__'); 
-        // Note: L'environnement remplacera automatiquement la ligne ci-dessus.
+        // CONFIGURATION FIREBASE
+        const firebaseConfig = JSON.parse(atob('eyJhcmNoaXZlIjogdHJ1ZSwgImFwaUtleSI6ICIiLCAiYXV0aERvbWFpbiI6ICIiLCAicHJvamVjdElkIjogImFydGlmYWN0cyIsICJzdG9yYWdlQnVja2V0IjogIiIsICJtZXNzYWdpbmdTZW5kZXJJZCI6ICIiLCAiYXBwSWQiOiAiIn0=')); 
+        // Note: L'environnement injectera la clé réelle au runtime. 
+        // Si vous copiez ce code sur GitHub, assurez-vous d'utiliser votre propre config Firebase si possible.
         
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        const appId = 'disjoncteur-maya';
+        const appId = 'maya-suivi-disjoncteur';
         const startDate = new Date(2026, 1, 20);
         const totalDays = 30;
 
         let daysState = {};
         let pressTimer;
 
-        // --- LOGIQUE CORE ---
         async function init() {
-            await signInAnonymously(auth);
-            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'progress');
+            try {
+                const userCred = await signInAnonymously(auth);
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'progress');
 
-            onSnapshot(docRef, (snap) => {
-                if (snap.exists()) {
-                    daysState = snap.data().states || {};
+                onSnapshot(docRef, (snap) => {
+                    if (snap.exists()) {
+                        daysState = snap.data().states || {};
+                    } else {
+                        setDoc(docRef, { states: {} });
+                        daysState = {};
+                    }
                     render();
-                } else {
-                    setDoc(docRef, { states: {} });
-                }
-            });
+                }, (err) => {
+                    console.error("Erreur Firestore:", err);
+                    document.getElementById('message').innerText = "Erreur Sync ❌";
+                });
+            } catch (err) {
+                console.error("Erreur Auth:", err);
+                document.getElementById('message').innerText = "Erreur Connexion 📡";
+            }
         }
 
         async function updateDay(dateKey, status) {
@@ -50,21 +117,25 @@
                 newState[dateKey] = status;
             }
 
-            await updateDoc(docRef, { states: newState });
-            
-            if (status === 'done' && Object.values(newState).filter(s => s === 'done').length === totalDays) {
-                confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+            try {
+                await updateDoc(docRef, { states: newState });
+                if (status === 'done' && Object.values(newState).filter(s => s === 'done').length === totalDays) {
+                    confetti({ particleCount: 200, spread: 80, origin: { y: 0.7 }, colors: ['#6366F1', '#10B981', '#F43F5E'] });
+                }
+            } catch (e) {
+                // Si le document n'existe pas encore
+                await setDoc(docRef, { states: newState });
             }
         }
 
-        // --- RENDU UI ---
         function render() {
             const grid = document.getElementById('grid');
             const counter = document.getElementById('counter');
             const progress = document.getElementById('progress-bar');
             const msg = document.getElementById('message');
+            const trophy = document.getElementById('trophy');
+            
             grid.innerHTML = '';
-
             let doneCount = 0;
             const todayStr = new Date().toISOString().split('T')[0];
 
@@ -77,80 +148,74 @@
                 if (state === 'done') doneCount++;
 
                 const btn = document.createElement('button');
-                btn.className = `relative h-20 rounded-2xl border-2 transition-all flex flex-col items-center justify-center select-none active:scale-90 `;
+                btn.className = `day-btn relative h-20 rounded-[24px] border-2 transition-all flex flex-col items-center justify-center `;
                 
-                if (state === 'done') btn.classList.add('bg-emerald-500', 'border-emerald-600', 'text-white');
-                else if (state === 'missed') btn.classList.add('bg-rose-500', 'border-rose-600', 'text-white');
-                else if (isToday) btn.classList.add('bg-indigo-50', 'border-indigo-400', 'text-indigo-700');
-                else btn.classList.add('bg-white', 'border-transparent', 'text-slate-400');
+                if (state === 'done') {
+                    btn.classList.add('bg-emerald-500', 'border-emerald-600', 'text-white', 'shadow-lg', 'shadow-emerald-100');
+                    btn.innerHTML = '<svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="4" d="M5 13l4 4L19 7"></path></svg>';
+                } else if (state === 'missed') {
+                    btn.classList.add('bg-rose-500', 'border-rose-600', 'text-white', 'shadow-lg', 'shadow-rose-100');
+                    btn.innerHTML = '<svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="4" d="M6 18L18 6M6 6l12 12"></path></svg>';
+                } else {
+                    btn.classList.add(isToday ? 'bg-indigo-50' : 'bg-white', isToday ? 'border-indigo-400' : 'border-slate-100', isToday ? 'text-indigo-600' : 'text-slate-400');
+                    btn.innerHTML = `
+                        <span class="text-[9px] font-black uppercase opacity-50 mb-0.5">${date.toLocaleDateString('fr-FR', { weekday: 'short' })}</span>
+                        <span class="text-xl font-black">${date.getDate()}</span>
+                    `;
+                }
 
-                btn.innerHTML = state === 'done' ? '✅' : state === 'missed' ? '❌' : `
-                    <span class="text-[10px] font-bold uppercase opacity-60">${date.toLocaleDateString('fr-FR', { weekday: 'short' })}</span>
-                    <span class="text-lg font-black">${date.getDate()}</span>
-                `;
-
-                // Events
-                const start = () => {
-                    btn.classList.add('scale-110');
+                // Interaction appui long
+                const start = (e) => {
+                    btn.classList.add('is-pressing');
                     pressTimer = setTimeout(() => {
                         updateDay(dateKey, 'missed');
-                        if (navigator.vibrate) navigator.vibrate(50);
-                    }, 800);
+                        if (navigator.vibrate) navigator.vibrate(60);
+                        btn.classList.remove('is-pressing');
+                    }, 750);
                 };
-                const stop = () => {
-                    btn.classList.remove('scale-110');
+
+                const end = () => {
+                    btn.classList.remove('is-pressing');
                     clearTimeout(pressTimer);
                 };
 
                 btn.onmousedown = start;
                 btn.ontouchstart = (e) => { e.preventDefault(); start(); };
-                btn.onmouseup = stop;
-                btn.ontouchend = stop;
-                btn.onclick = () => { if (!state || state === 'missed') updateDay(dateKey, 'done'); else updateDay(dateKey, 'done'); };
+                btn.onmouseup = end;
+                btn.ontouchend = end;
+                btn.onmouseleave = end;
+                btn.onclick = () => { 
+                    if (Date.now() - pressTimer < 750) { // Si ce n'était pas un appui long
+                        updateDay(dateKey, 'done');
+                    }
+                };
 
                 grid.appendChild(btn);
             }
 
             counter.innerText = `${doneCount} / ${totalDays}`;
             progress.style.width = `${(doneCount / totalDays) * 100}%`;
-            msg.innerText = doneCount === totalDays ? "Bravo Maya ! 🎉" : "On continue ! 💪";
+            
+            if (doneCount === 0) msg.innerText = "Prête Maya ? 🚀";
+            else if (doneCount === totalDays) {
+                msg.innerText = "BRAVO MAYA ! 🏆";
+                msg.classList.add('text-emerald-500');
+                trophy.innerHTML = '🏆';
+                trophy.classList.add('scale-125', 'rotate-12', 'bg-yellow-100');
+            } else {
+                msg.innerText = "Continue Maya ! ✨";
+            }
         }
 
         window.confirmReset = () => {
-            if(confirm("Tout effacer ?")) updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'progress'), { states: {} });
+            if(confirm("Voulez-vous vraiment tout effacer ?")) {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'progress');
+                updateDoc(docRef, { states: {} });
+            }
         };
 
         init();
     </script>
-    <style>
-        * { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; user-select: none; }
-        body { background-color: #F8FAFC; font-family: sans-serif; }
-    </style>
-</head>
-<body class="pb-10">
-    <header class="bg-white p-6 shadow-sm rounded-b-[40px] mb-6 flex justify-between items-center">
-        <h1 class="text-2xl font-black text-slate-800">Suivi Maya 🦷</h1>
-        <div class="bg-indigo-50 p-3 rounded-2xl text-xl">✨</div>
-    </header>
-
-    <main class="max-w-md mx-auto px-6">
-        <div class="bg-slate-900 rounded-[32px] p-6 text-white mb-8 shadow-xl">
-            <div class="flex justify-between items-end mb-4">
-                <h2 class="text-4xl font-black" id="counter">0 / 30</h2>
-                <p class="text-indigo-400 font-bold" id="message">Chargement...</p>
-            </div>
-            <div class="w-full bg-slate-800 h-3 rounded-full overflow-hidden">
-                <div id="progress-bar" class="bg-indigo-500 h-full transition-all duration-1000" style="width: 0%"></div>
-            </div>
-        </div>
-
-        <p class="text-center text-[10px] text-slate-400 uppercase font-bold tracking-widest mb-4">Clic = Fait • Appui Long = Oubli</p>
-        <div class="grid grid-cols-4 gap-3" id="grid"></div>
-
-        <button onclick="confirmReset()" class="block mx-auto mt-10 text-slate-300 text-[10px] font-bold uppercase tracking-widest">
-            Réinitialiser
-        </button>
-    </main>
 </body>
 </html>
 
