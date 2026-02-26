@@ -14,7 +14,6 @@
         .is-pressing { transform: scale(0.92); filter: brightness(0.9); }
         .is-long-pressing { transform: scale(1.1); background-color: #FFE4E6 !important; border-color: #FB7185 !important; }
         
-        /* Couleurs des états */
         .completed-done { background-color: #22C55E !important; border-color: #16A34A !important; color: white !important; }
         .completed-double { background-color: #059669 !important; border-color: #047857 !important; color: white !important; box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3); }
         .completed-missed { background-color: #F43F5E !important; border-color: #E11D48 !important; color: white !important; }
@@ -157,7 +156,7 @@
                     btn.innerHTML = '✅';
                 } else if (state === 'double') {
                     btn.classList.add('completed-double');
-                    btn.innerHTML = '<span class="text-xs">x2</span><span class="text-xl">✅</span>';
+                    btn.innerHTML = '<span class="text-[10px] leading-none mb-0.5">x2</span><span class="text-xl">✅</span>';
                 } else if (state === 'missed') {
                     btn.classList.add('completed-missed');
                     btn.innerHTML = '❌';
@@ -169,10 +168,11 @@
 
                 const handleStart = (e) => {
                     const nowTap = Date.now();
-                    const isDoubleTap = (nowTap - lastTapTime) < 300;
+                    const isDoubleTap = (nowTap - lastTapTime) < 350; // Tolérance légèrement augmentée
                     lastTapTime = nowTap;
 
                     if (isDoubleTap) {
+                        // CRITIQUE : On annule le timeout du clic simple précédent
                         clearTimeout(tapTimeout);
                         clearTimeout(pressTimer);
                         handleUpdate(key, 'double');
@@ -192,10 +192,10 @@
                     if (duration >= 600) {
                         handleUpdate(key, 'missed');
                     } else if (duration > 10) {
-                        // On attend un court instant pour voir s'il y a un second clic
+                        // On attend de voir s'il y a un second clic avant de valider le clic simple
                         tapTimeout = setTimeout(() => {
                             handleUpdate(key, 'done');
-                        }, 250);
+                        }, 300);
                     }
                 };
 
@@ -213,7 +213,12 @@
 
         function handleUpdate(key, type) {
             const newState = {...daysState};
-            if (newState[key] === type) delete newState[key]; else newState[key] = type;
+            // Toggle : si déjà cet état, on l'enlève, sinon on l'applique
+            if (newState[key] === type) {
+                delete newState[key];
+            } else {
+                newState[key] = type;
+            }
             set(dataRef, newState);
             
             const score = Object.values(newState).reduce((acc, val) => {
