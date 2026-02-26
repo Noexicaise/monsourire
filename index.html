@@ -24,7 +24,6 @@
             100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0); border-color: #fb923c; }
         }
         .needs-attention { animation: pulse-orange 2s infinite; border-width: 3px !important; }
-        
         #loader { position: fixed; inset: 0; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; transition: opacity 0.5s ease; }
     </style>
 </head>
@@ -95,10 +94,10 @@
         const totalDays = 30;
         const startDate = new Date(2026, 1, 20);
         let daysState = {};
-        let pressTimer;
-        let pressStartTime;
+        let pressTimer = null;
+        let tapTimeout = null;
         let lastTapTime = 0;
-        let tapTimeout;
+        let isLongPress = false;
 
         function init() {
             onValue(dataRef, (snapshot) => {
@@ -166,43 +165,50 @@
                     if (key === todayStr && isAfter19h) btn.classList.add('needs-attention');
                 }
 
-                const handleStart = (e) => {
+                // Utilisation exclusive des Pointer Events pour gérer Souris + Tactile sans doublons
+                btn.onpointerdown = (e) => {
                     const nowTap = Date.now();
-                    const isDoubleTap = (nowTap - lastTapTime) < 350; // Tolérance légèrement augmentée
-                    lastTapTime = nowTap;
-
-                    if (isDoubleTap) {
-                        // CRITIQUE : On annule le timeout du clic simple précédent
+                    isLongPress = false;
+                    
+                    // Si deuxième clic dans les 300ms
+                    if (nowTap - lastTapTime < 300) {
                         clearTimeout(tapTimeout);
                         clearTimeout(pressTimer);
                         handleUpdate(key, 'double');
+                        lastTapTime = 0; // Reset pour éviter un triple clic
                         return;
                     }
-
-                    pressStartTime = Date.now();
+                    
+                    lastTapTime = nowTap;
                     btn.classList.add('is-pressing');
-                    pressTimer = setTimeout(() => btn.classList.add('is-long-pressing'), 600);
+                    
+                    // Timer pour l'appui long
+                    pressTimer = setTimeout(() => {
+                        isLongPress = true;
+                        btn.classList.add('is-long-pressing');
+                        handleUpdate(key, 'missed');
+                    }, 700);
                 };
 
-                const handleEnd = (e) => {
-                    const duration = Date.now() - pressStartTime;
+                btn.onpointerup = (e) => {
                     clearTimeout(pressTimer);
                     btn.classList.remove('is-pressing', 'is-long-pressing');
-
-                    if (duration >= 600) {
-                        handleUpdate(key, 'missed');
-                    } else if (duration > 10) {
-                        // On attend de voir s'il y a un second clic avant de valider le clic simple
+                    
+                    if (!isLongPress && lastTapTime !== 0) {
+                        // On attend de voir si c'est un clic simple (pas de second clic après 250ms)
                         tapTimeout = setTimeout(() => {
                             handleUpdate(key, 'done');
-                        }, 300);
+                            lastTapTime = 0;
+                        }, 250);
                     }
                 };
 
-                btn.onmousedown = handleStart; 
-                btn.onmouseup = handleEnd;
-                btn.ontouchstart = (e) => { e.preventDefault(); handleStart(); };
-                btn.ontouchend = (e) => { e.preventDefault(); handleEnd(); };
+                btn.onpointercancel = () => {
+                    clearTimeout(pressTimer);
+                    clearTimeout(tapTimeout);
+                    btn.classList.remove('is-pressing', 'is-long-pressing');
+                };
+
                 grid.appendChild(btn);
             }
             
@@ -213,7 +219,6 @@
 
         function handleUpdate(key, type) {
             const newState = {...daysState};
-            // Toggle : si déjà cet état, on l'enlève, sinon on l'applique
             if (newState[key] === type) {
                 delete newState[key];
             } else {
