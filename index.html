@@ -72,7 +72,7 @@
                 <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-emerald-700"></div>Double (x2)</div>
                 <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-rose-500"></div>Oubli</div>
             </div>
-            <p class="text-center text-[8px] text-slate-300 uppercase font-bold tracking-widest italic">Double clic pour le mode "Double" (rattrapage)</p>
+            <p class="text-center text-[8px] text-slate-300 uppercase font-bold tracking-widest italic">Double clic = Mode "Double" / Appui long = Oubli</p>
         </div>
 
         <button onclick="confirmReset()" class="block mx-auto mt-12 text-slate-300 text-[10px] font-bold uppercase tracking-[0.2em]">Réinitialiser le suivi</button>
@@ -99,6 +99,7 @@
         let pressTimer;
         let pressStartTime;
         let lastTapTime = 0;
+        let tapTimeout;
 
         function init() {
             onValue(dataRef, (snapshot) => {
@@ -115,10 +116,9 @@
 
         function checkTimeAndAlert() {
             const now = new Date();
-            const hours = now.getHours();
             const todayKey = now.toISOString().split('T')[0];
             const timeAlert = document.getElementById('time-alert');
-            if (hours >= 19 && !daysState[todayKey]) {
+            if (now.getHours() >= 19 && !daysState[todayKey]) {
                 timeAlert.classList.remove('hidden');
             } else {
                 timeAlert.classList.add('hidden');
@@ -146,7 +146,6 @@
                 const key = date.toISOString().split('T')[0];
                 const state = daysState[key];
                 
-                // Calcul du score : double compte pour 2
                 if (state === 'done') currentTotal += 1;
                 if (state === 'double') currentTotal += 2;
 
@@ -168,39 +167,42 @@
                     if (key === todayStr && isAfter19h) btn.classList.add('needs-attention');
                 }
 
-                const start = (e) => { 
+                const handleStart = (e) => {
                     const nowTap = Date.now();
-                    const doubleTap = (nowTap - lastTapTime) < 300;
+                    const isDoubleTap = (nowTap - lastTapTime) < 300;
                     lastTapTime = nowTap;
 
-                    if (doubleTap) {
+                    if (isDoubleTap) {
+                        clearTimeout(tapTimeout);
                         clearTimeout(pressTimer);
-                        handle(key, 'double');
+                        handleUpdate(key, 'double');
                         return;
                     }
 
-                    pressStartTime = Date.now(); 
-                    btn.classList.add('is-pressing'); 
-                    pressTimer = setTimeout(() => btn.classList.add('is-long-pressing'), 600); 
+                    pressStartTime = Date.now();
+                    btn.classList.add('is-pressing');
+                    pressTimer = setTimeout(() => btn.classList.add('is-long-pressing'), 600);
                 };
-                
-                const end = (e) => {
-                    const dur = Date.now() - pressStartTime;
+
+                const handleEnd = (e) => {
+                    const duration = Date.now() - pressStartTime;
                     clearTimeout(pressTimer);
                     btn.classList.remove('is-pressing', 'is-long-pressing');
-                    if (dur >= 600) handle(key, 'missed'); 
-                    else if (dur > 50 && (Date.now() - lastTapTime) > 200) {
-                        // Délai pour être sûr que ce n'est pas le début d'un double clic
-                        setTimeout(() => {
-                           if((Date.now() - lastTapTime) >= 200) handle(key, 'done');
+
+                    if (duration >= 600) {
+                        handleUpdate(key, 'missed');
+                    } else if (duration > 10) {
+                        // On attend un court instant pour voir s'il y a un second clic
+                        tapTimeout = setTimeout(() => {
+                            handleUpdate(key, 'done');
                         }, 250);
                     }
                 };
 
-                btn.onmousedown = start; 
-                btn.onmouseup = end;
-                btn.ontouchstart = (e) => { e.preventDefault(); start(); };
-                btn.ontouchend = (e) => { e.preventDefault(); end(); };
+                btn.onmousedown = handleStart; 
+                btn.onmouseup = handleEnd;
+                btn.ontouchstart = (e) => { e.preventDefault(); handleStart(); };
+                btn.ontouchend = (e) => { e.preventDefault(); handleEnd(); };
                 grid.appendChild(btn);
             }
             
@@ -209,13 +211,11 @@
             document.getElementById('message').innerText = currentTotal >= totalDays ? "Gagné Maya ! 🎉" : (isAfter19h && !daysState[todayStr] ? "Vite Maya ! 🦷" : "Bravo Maya ! ✨");
         }
 
-        function handle(key, type) {
+        function handleUpdate(key, type) {
             const newState = {...daysState};
-            // Si on reclique sur le même type, on efface. Sinon on applique le nouveau type.
             if (newState[key] === type) delete newState[key]; else newState[key] = type;
             set(dataRef, newState);
             
-            // Calcul du total pour le confetti
             const score = Object.values(newState).reduce((acc, val) => {
                 if(val === 'done') return acc + 1;
                 if(val === 'double') return acc + 2;
@@ -227,7 +227,7 @@
             }
         }
 
-        window.confirmReset = () => { if(confirm("Effacer tout le suivi de Maya ?")) set(dataRef, null); };
+        window.confirmReset = () => { if(confirm("Effacer tout le suivi ?")) set(dataRef, null); };
         init();
     </script>
 </body>
