@@ -13,7 +13,10 @@
         .day-btn { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); position: relative; }
         .is-pressing { transform: scale(0.92); filter: brightness(0.9); }
         .is-long-pressing { transform: scale(1.1); background-color: #FFE4E6 !important; border-color: #FB7185 !important; }
+        
+        /* Couleurs des états */
         .completed-done { background-color: #22C55E !important; border-color: #16A34A !important; color: white !important; }
+        .completed-double { background-color: #059669 !important; border-color: #047857 !important; color: white !important; box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3); }
         .completed-missed { background-color: #F43F5E !important; border-color: #E11D48 !important; color: white !important; }
         
         @keyframes pulse-orange {
@@ -63,10 +66,13 @@
 
         <div class="grid grid-cols-4 gap-3" id="grid"></div>
 
-        <div class="mt-8 flex justify-center gap-6 text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-            <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-emerald-500"></div>Fait</div>
-            <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-rose-500"></div>Oubli</div>
-            <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-orange-500"></div>À faire !</div>
+        <div class="mt-8 space-y-3">
+            <div class="flex justify-center gap-4 text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-emerald-500"></div>Fait</div>
+                <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-emerald-700"></div>Double (x2)</div>
+                <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-rose-500"></div>Oubli</div>
+            </div>
+            <p class="text-center text-[8px] text-slate-300 uppercase font-bold tracking-widest italic">Double clic pour le mode "Double" (rattrapage)</p>
         </div>
 
         <button onclick="confirmReset()" class="block mx-auto mt-12 text-slate-300 text-[10px] font-bold uppercase tracking-[0.2em]">Réinitialiser le suivi</button>
@@ -76,7 +82,6 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
         import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-database.js";
 
-        // Configuration personnelle de votre projet Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyBw6soSae9hhG1I79KDcl0P6NdeBR2xLLs",
             databaseURL: "https://mon-sourire-default-rtdb.europe-west1.firebasedatabase.app",
@@ -89,10 +94,11 @@
         const dataRef = ref(db, 'suivi/maya');
 
         const totalDays = 30;
-        const startDate = new Date(2026, 1, 20); // Date fixée au 20 Février 2026
+        const startDate = new Date(2026, 1, 20);
         let daysState = {};
         let pressTimer;
         let pressStartTime;
+        let lastTapTime = 0;
 
         function init() {
             onValue(dataRef, (snapshot) => {
@@ -104,8 +110,6 @@
                 document.getElementById('loader').style.opacity = '0';
                 setTimeout(() => document.getElementById('loader').style.display = 'none', 500);
             });
-            
-            // Vérification toutes les minutes pour le rappel de 19h
             setInterval(checkTimeAndAlert, 60000);
         }
 
@@ -114,8 +118,6 @@
             const hours = now.getHours();
             const todayKey = now.toISOString().split('T')[0];
             const timeAlert = document.getElementById('time-alert');
-            
-            // Alerte si après 19h et rien n'a été coché aujourd'hui
             if (hours >= 19 && !daysState[todayKey]) {
                 timeAlert.classList.remove('hidden');
             } else {
@@ -124,25 +126,15 @@
         }
 
         window.enableNotifications = () => {
-            if (!("Notification" in window)) {
-                alert("Les notifications ne sont pas supportées sur ce téléphone.");
-                return;
-            }
-            Notification.requestPermission().then(permission => {
-                if (permission === "granted") {
-                    document.getElementById('notif-btn').innerText = "✅";
-                    document.getElementById('notif-btn').classList.add('text-emerald-500');
-                    new Notification("Maya ✨", { 
-                        body: "Super ! Je te rappellerai de resserrer les dents à 19h.",
-                        icon: "https://cdn-icons-png.flaticon.com/512/2818/2818366.png"
-                    });
-                }
+            if (!("Notification" in window)) return alert("Non supporté");
+            Notification.requestPermission().then(p => {
+                if (p === "granted") new Notification("Maya ✨", { body: "Rappels activés pour 19h !" });
             });
         };
 
         function render() {
             const grid = document.getElementById('grid');
-            let doneCount = 0;
+            let currentTotal = 0;
             const now = new Date();
             const todayStr = now.toISOString().split('T')[0];
             const isAfter19h = now.getHours() >= 19;
@@ -154,7 +146,9 @@
                 const key = date.toISOString().split('T')[0];
                 const state = daysState[key];
                 
-                if (state === 'done') doneCount++;
+                // Calcul du score : double compte pour 2
+                if (state === 'done') currentTotal += 1;
+                if (state === 'double') currentTotal += 2;
 
                 const btn = document.createElement('button');
                 btn.className = `day-btn h-20 rounded-[22px] border-2 flex flex-col items-center justify-center font-bold `;
@@ -162,30 +156,45 @@
                 if (state === 'done') {
                     btn.classList.add('completed-done');
                     btn.innerHTML = '✅';
+                } else if (state === 'double') {
+                    btn.classList.add('completed-double');
+                    btn.innerHTML = '<span class="text-xs">x2</span><span class="text-xl">✅</span>';
                 } else if (state === 'missed') {
                     btn.classList.add('completed-missed');
                     btn.innerHTML = '❌';
                 } else {
                     btn.classList.add('bg-white', 'border-slate-100', 'text-slate-400');
                     btn.innerHTML = `<span class="text-[9px] opacity-50 uppercase">${date.toLocaleDateString('fr-FR', {weekday:'short'})}</span><span class="text-xl">${date.getDate()}</span>`;
-                    
-                    // Animation si c'est aujourd'hui et qu'il est l'heure
-                    if (key === todayStr && isAfter19h) {
-                        btn.classList.add('needs-attention');
-                    }
+                    if (key === todayStr && isAfter19h) btn.classList.add('needs-attention');
                 }
 
-                const start = () => { 
+                const start = (e) => { 
+                    const nowTap = Date.now();
+                    const doubleTap = (nowTap - lastTapTime) < 300;
+                    lastTapTime = nowTap;
+
+                    if (doubleTap) {
+                        clearTimeout(pressTimer);
+                        handle(key, 'double');
+                        return;
+                    }
+
                     pressStartTime = Date.now(); 
                     btn.classList.add('is-pressing'); 
                     pressTimer = setTimeout(() => btn.classList.add('is-long-pressing'), 600); 
                 };
                 
-                const end = () => {
+                const end = (e) => {
                     const dur = Date.now() - pressStartTime;
                     clearTimeout(pressTimer);
                     btn.classList.remove('is-pressing', 'is-long-pressing');
-                    if (dur >= 600) handle(key, 'missed'); else if (dur > 50) handle(key, 'done');
+                    if (dur >= 600) handle(key, 'missed'); 
+                    else if (dur > 50 && (Date.now() - lastTapTime) > 200) {
+                        // Délai pour être sûr que ce n'est pas le début d'un double clic
+                        setTimeout(() => {
+                           if((Date.now() - lastTapTime) >= 200) handle(key, 'done');
+                        }, 250);
+                    }
                 };
 
                 btn.onmousedown = start; 
@@ -195,25 +204,31 @@
                 grid.appendChild(btn);
             }
             
-            document.getElementById('counter').innerText = `${doneCount} / ${totalDays}`;
-            document.getElementById('progress-bar').style.width = `${(doneCount/totalDays)*100}%`;
-            document.getElementById('message').innerText = doneCount === totalDays ? "Gagné Maya ! 🎉" : (isAfter19h && !daysState[todayStr] ? "Vite Maya ! 🦷" : "Bravo Maya ! ✨");
+            document.getElementById('counter').innerText = `${currentTotal} / ${totalDays}`;
+            document.getElementById('progress-bar').style.width = `${Math.min((currentTotal/totalDays)*100, 100)}%`;
+            document.getElementById('message').innerText = currentTotal >= totalDays ? "Gagné Maya ! 🎉" : (isAfter19h && !daysState[todayStr] ? "Vite Maya ! 🦷" : "Bravo Maya ! ✨");
         }
 
         function handle(key, type) {
             const newState = {...daysState};
+            // Si on reclique sur le même type, on efface. Sinon on applique le nouveau type.
             if (newState[key] === type) delete newState[key]; else newState[key] = type;
             set(dataRef, newState);
             
-            if (type === 'done' && Object.values(newState).filter(v => v === 'done').length === totalDays) {
+            // Calcul du total pour le confetti
+            const score = Object.values(newState).reduce((acc, val) => {
+                if(val === 'done') return acc + 1;
+                if(val === 'double') return acc + 2;
+                return acc;
+            }, 0);
+
+            if (score >= totalDays) {
                 confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
             }
         }
 
         window.confirmReset = () => { if(confirm("Effacer tout le suivi de Maya ?")) set(dataRef, null); };
-        
         init();
     </script>
 </body>
 </html>
-
